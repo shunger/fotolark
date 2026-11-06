@@ -106,6 +106,8 @@ struct BrowserView: View {
                     } else if model.source == .timeline {
                         Text(model.library.roots.isEmpty ? "Add a folder to see your photos here" : "Looking for photos…")
                             .font(.title3)
+                    } else if model.currentFaceGroup == nil, model.source.map({ if case .person = $0 { true } else { false } }) ?? false {
+                        Text("Still looking for this person’s photos…").font(.title3)
                     } else if model.currentAlbum != nil {
                         Text("No photos in this album").font(.title3)
                         Text("Select photos in a folder, then right-click and choose Add to Album.")
@@ -204,6 +206,9 @@ enum FileMenu {
             menu.addItem(ActionItem(count == 1 ? "Remove from Album" : "Remove \(count) Photos from Album") {
                 model.removeFromCurrentAlbum()
             })
+        }
+        if model.currentFaceGroup != nil {
+            menu.addItem(ActionItem("Not This Person") { model.removeFromFaceGroup() })
         }
         menu.addItem(.separator())
         menu.addItem(ActionItem("Show in Finder") { model.revealInFinder() })

@@ -21,6 +21,12 @@ final class AppModel {
         case timeline
         /// Photos in the watched folders matching the search.
         case search(String)
+        /// Faces found in the photos, grouped by person.
+        case people
+        /// Photos of a named person.
+        case person(Person.ID)
+        /// Photos of an unnamed group of faces (keyed by its first face).
+        case faceGroup(UUID)
     }
 
     var source: Source? {
@@ -72,6 +78,10 @@ final class AppModel {
     let importHistory: ImportHistory
     let albumStore: AlbumStore
     let index: LibraryIndex
+    let analysis: AnalysisStore
+    let peopleStore: PeopleStore
+    /// Faces grouped by person, for the People view.
+    private(set) var faceGroups: [FaceGroup] = []
     /// What the background indexer is doing, for the sidebar.
     private(set) var indexStatus: String?
     private var indexTask: Task<Void, Never>?
@@ -102,6 +112,8 @@ final class AppModel {
         albumStore = AlbumStore(fileURL: support.appendingPathComponent("Albums.json"))
         albums = albumStore.albums
         index = LibraryIndex(fileURL: caches.appendingPathComponent("LibraryIndex.json"))
+        analysis = AnalysisStore(fileURL: caches.appendingPathComponent("Analysis.plist"))
+        peopleStore = PeopleStore(fileURL: support.appendingPathComponent("People.json"))
         sortOrder = PhotoSortOrder(rawValue: UserDefaults.standard.string(forKey: "sortOrder") ?? "") ?? .dateTaken
         let size = UserDefaults.standard.double(forKey: "thumbnailSize")
         thumbnailSize = size > 0 ? size : 160
@@ -118,6 +130,7 @@ final class AppModel {
             reloadPhotos()
         }
         scheduleReindex(after: .seconds(1))
+        recomputeFaceGroups()
     }
 
     // MARK: Opening
@@ -186,6 +199,7 @@ final class AppModel {
         let store = store
         let albumStore = albumStore
         let index = index
+        let facePhotos = photosForFaces(source)
         Task {
             let (found, records) = await Task.detached(priority: .userInitiated) { () -> ([ScannedPhoto], [URL: PhotoRecord]) in
                 let found: [ScannedPhoto]
@@ -194,6 +208,8 @@ final class AppModel {
                 case .opened: found = opened.compactMap(Self.scan)
                 case .album(let id): found = albumStore.photos(in: id).compactMap(Self.scan)
                 case .timeline: found = index.all.map(\.scanned)
+                case .person, .faceGroup: found = facePhotos.compactMap(Self.scan)
+                case .people: found = []
                 case .search(let text): found = index.search(text).map(\.scanned)
                 case .importing: found = []
                 }
@@ -341,6 +357,7 @@ final class AppModel {
         case renameAlbum(Album.ID)
         case pages(PageSheet.Mode, [URL])
         case collage([URL])
+        case duplicates([ScannedPhoto])
 
         var id: String {
             switch self {
@@ -352,6 +369,7 @@ final class AppModel {
             case .renameAlbum: "renameAlbum"
             case .pages(let mode, _): "pages-\(mode.rawValue)"
             case .collage: "collage"
+            case .duplicates: "duplicates"
             }
         }
     }
@@ -768,7 +786,7 @@ final class AppModel {
     var readsTextInPhotos = UserDefaults.standard.object(forKey: "readTextInPhotos") as? Bool ?? true {
         didSet {
             UserDefaults.standard.set(readsTextInPhotos, forKey: "readTextInPhotos")
-            if readsTextInPhotos { readTextInBackground() } else { textTask?.cancel(); indexStatus = nil }
+            readTextInBackground()
         }
     }
 
@@ -803,9 +821,31 @@ final class AppModel {
     /// Reads text in photos not read yet, a few at a time in the background.
     private func readTextInBackground() {
         textTask?.cancel()
-        guard readsTextInPhotos else { return }
         let index = index
+        let analysis = analysis
+        let context = engine.context
+        let analyzes = analyzesPhotos
         textTask = Task {
+            // First faces and look-alikes (quicker per photo), then text.
+            if analyzes {
+                let todo = analysis.needsAnalysis(index.all.map(\.scanned))
+                for (i, photo) in todo.enumerated() {
+                    if Task.isCancelled { return }
+                    indexStatus = "Looking for faces and look-alikes: \((i + 1).formatted()) of \(todo.count.formatted())"
+                    let result = await Task.detached(priority: .background) {
+                        PhotoAnalyzer.analyze(photo.url, context: context)
+                    }.value
+                    analysis.set(result ?? PhotoAnalysis(fingerprint: nil, faces: []), for: photo)
+                    if i % 100 == 99 { analysis.save(); recomputeFaceGroups() }
+                }
+                if !todo.isEmpty {
+                    analysis.prune(keeping: Set(index.all.map(\.path)))
+                    analysis.save()
+                }
+                recomputeFaceGroups()
+                indexStatus = nil
+            }
+            guard readsTextInPhotos else { return }
             let todo = index.photosNeedingText()
             guard !todo.isEmpty else { return }
             for (i, url) in todo.enumerated() {
@@ -818,6 +858,108 @@ final class AppModel {
             index.save()
             if !Task.isCancelled { indexStatus = nil }
         }
+    }
+
+    // MARK: People and duplicates
+
+    /// Look for faces and similar photos in the background (Settings).
+    var analyzesPhotos = UserDefaults.standard.object(forKey: "analyzePhotos") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(analyzesPhotos, forKey: "analyzePhotos")
+            readTextInBackground()
+        }
+    }
+
+    /// How alike faces must be to be grouped together (People view).
+    var faceThreshold = UserDefaults.standard.object(forKey: "faceThreshold") as? Double
+        ?? Double(PeopleStore.sameFaceThreshold) {
+        didSet {
+            UserDefaults.standard.set(faceThreshold, forKey: "faceThreshold")
+            recomputeFaceGroups()
+        }
+    }
+
+    var people: [Person] { faceGroups.compactMap(\.person) }
+
+    private var faceTask: Task<Void, Never>?
+
+    func recomputeFaceGroups() {
+        faceTask?.cancel()
+        let photos = index.all.map(\.scanned)
+        let analysis = analysis, store = peopleStore, threshold = Float(faceThreshold)
+        faceTask = Task {
+            let groups = await Task.detached(priority: .utility) {
+                store.groups(analysis.allFaces(in: photos), threshold: threshold)
+            }.value
+            guard !Task.isCancelled else { return }
+            faceGroups = groups
+            switch source {
+            case .person, .faceGroup: reloadPhotos()
+            default: break
+            }
+        }
+    }
+
+    private func photosForFaces(_ source: Source) -> [URL] {
+        let group: FaceGroup?
+        switch source {
+        case .person(let id): group = faceGroups.first { $0.person?.id == id }
+        case .faceGroup(let id): group = faceGroups.first { $0.id == id }
+        default: return []
+        }
+        var seen = Set<URL>()
+        return (group?.faces ?? []).map(\.photo).filter { seen.insert($0).inserted }
+    }
+
+    var currentFaceGroup: FaceGroup? {
+        switch source {
+        case .person(let id): faceGroups.first { $0.person?.id == id }
+        case .faceGroup(let id): faceGroups.first { $0.id == id }
+        default: nil
+        }
+    }
+
+    func nameFaces(_ group: FaceGroup, as name: String) {
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let person = peopleStore.name(group.faces.map(\.face.id), as: name)
+        if case .faceGroup(group.id) = source { source = .person(person.id) }
+        recomputeFaceGroups()
+    }
+
+    func renamePerson(_ id: Person.ID, to name: String) {
+        peopleStore.rename(id, to: name)
+        recomputeFaceGroups()
+    }
+
+    func forgetPerson(_ id: Person.ID) {
+        peopleStore.delete(id)
+        if source == .person(id) { source = .people }
+        recomputeFaceGroups()
+    }
+
+    /// "Not this person": takes the selected photos' faces out of the group shown.
+    func removeFromFaceGroup() {
+        guard let group = currentFaceGroup else { return }
+        let targets = Set(targetPhotos)
+        for item in group.faces where targets.contains(item.photo) { peopleStore.remove(item.face.id) }
+        recomputeFaceGroups()
+    }
+
+    func showDuplicates() {
+        let scope = selection.count > 1 ? photos.filter { selection.contains($0.url) } : photos
+        guard scope.count > 1 else { return }
+        sheet = .duplicates(scope)
+    }
+
+    /// Moves photos to the Trash (from the duplicates sheet).
+    func trash(_ urls: [URL]) {
+        closeEditor()
+        var failed: [String] = []
+        for url in urls {
+            do { try fileOperations.moveToTrash(url) } catch { failed.append(url.lastPathComponent) }
+        }
+        reloadPhotos()
+        if !failed.isEmpty { errorMessage = "Couldn’t move \(failed.joined(separator: ", ")) to the Trash." }
     }
 
     // MARK: Albums
@@ -1145,15 +1287,17 @@ final class DateTakenCache: @unchecked Sendable {
 extension AppModel.Source {
     /// True for sources shown in the photo grid.
     var isBrowsable: Bool {
-        if case .importing = self { return false }
-        return true
+        switch self {
+        case .importing, .people: false
+        default: true
+        }
     }
 
     /// Folders, albums and opened photos follow the sort menu; the timeline and search
     /// results are always newest first.
     var isFolderLike: Bool {
         switch self {
-        case .timeline, .search: false
+        case .timeline, .search, .person, .faceGroup: false
         default: true
         }
     }

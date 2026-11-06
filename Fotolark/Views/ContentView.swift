@@ -31,6 +31,7 @@ struct ContentView: View {
             case .renameAlbum(let id): AlbumNameSheet(model: model, renaming: id)
             case .pages(let mode, let photos): PageSheet(model: model, photos: photos, mode: mode)
             case .collage(let photos): CollageSheet(model: model, photos: photos)
+            case .duplicates(let photos): DuplicatesSheet(model: model, photos: photos)
             }
         }
         .alert("Something went wrong", isPresented: Binding(
@@ -69,6 +70,8 @@ struct ContentView: View {
             }
         } else if let photos = model.comparing {
             CompareView(model: model, photos: photos)
+        } else if model.source == .people {
+            PeopleView(model: model)
         } else if case .importing(let key) = model.source {
             if let source = model.importSource(for: key) {
                 ImportView(model: model, source: source).id(key)
@@ -98,6 +101,8 @@ struct ContentView: View {
         case .album: return model.currentAlbum?.name ?? "Album"
         case .timeline: return "All Photos"
         case .search(let text): return "Search: \(text)"
+        case .people: return "People"
+        case .person, .faceGroup: return model.currentFaceGroup?.person?.name ?? "Unnamed person"
         case .importing(let key): return model.importSource(for: key)?.title ?? "Import"
         case nil: return "Fotolark"
         }

@@ -40,6 +40,13 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
   6. Borders and frames, shapes and arrows, versions: **built**
   7. Print, contact sheet, collage, PDF: **built**
 
+- Phase 5 (extras and Mac App Store release): in progress. Batches:
+  1. Find duplicates (identical and look-alike), face grouping and People: **built**
+  2. Apple Photos: import albums or dates to folders; open, edit and save back
+  3. Watch folders, Finder Services, Shortcuts actions
+  4. Help and first-run tour
+  5. App Store readiness: privacy manifest, required settings, release checklist
+
 ## Build and test
 
 - Open `Fotolark.xcodeproj` in Xcode and run the **Fotolark** scheme, or

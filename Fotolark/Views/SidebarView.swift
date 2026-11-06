@@ -18,6 +18,15 @@ struct SidebarView: View {
                     .badge(model.index.count)
                     .tag(AppModel.Source.timeline)
                     .help("Every photo in your folders, by month")
+                Label("People", systemImage: "person.2")
+                    .badge(model.people.count)
+                    .tag(AppModel.Source.people)
+                    .help("Faces found in your photos, grouped by person")
+                ForEach(model.people) { person in
+                    Label(person.name, systemImage: "person.crop.circle")
+                        .padding(.leading, 14)
+                        .tag(AppModel.Source.person(person.id))
+                }
                 if case .search(let text) = model.source {
                     Label("“\(text)”", systemImage: "magnifyingglass")
                         .tag(AppModel.Source.search(text))

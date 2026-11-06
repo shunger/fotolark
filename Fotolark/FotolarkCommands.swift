@@ -114,6 +114,10 @@ struct FotolarkCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             Button("Remove from Album") { model.removeFromCurrentAlbum() }
                 .disabled(model.currentAlbum == nil || model.targetPhotos.isEmpty)
+            Divider()
+            Button("Find Duplicates…") { model.showDuplicates() }
+                .disabled(model.photos.count < 2 || model.editor != nil)
+            Button("Show People") { model.closeEditor(); model.source = .people }
         }
 
         CommandMenu("Photo") {

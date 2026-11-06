@@ -38,6 +38,12 @@ private struct GeneralSettings: View {
 
             Toggle("Neutral gray background while editing", isOn: $neutralGray)
 
+            Toggle("Look for faces and look-alike photos", isOn: $model.analyzesPhotos)
+            Text("Groups faces by person (People) and finds near-duplicates. Done on this Mac in the background; nothing leaves it.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             Toggle("Read text in photos so search can find it", isOn: $model.readsTextInPhotos)
             Text("Signs, documents and screenshots become searchable. This runs quietly in the background on this Mac; nothing leaves it.")
                 .font(.callout)
