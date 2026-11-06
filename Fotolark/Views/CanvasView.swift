@@ -41,8 +41,19 @@ struct CanvasView: View {
         .focusEffectDisabled()
         .focused($focused)
         .onAppear { focused = true }
-        .onKeyPress(.leftArrow) { model.previous(); return .handled }
-        .onKeyPress(.rightArrow) { model.next(); return .handled }
+        // Arrow keys: previous/next photo, or move the crop (⇧ resizes it) while cropping.
+        .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
+            if editor.tool == .crop {
+                nudgeCrop(press.key, resize: press.modifiers.contains(.shift))
+                return .handled
+            }
+            switch press.key {
+            case .leftArrow: model.previous()
+            case .rightArrow: model.next()
+            default: return .ignored
+            }
+            return .handled
+        }
         .onKeyPress(.return) {
             guard editor.tool != .none else { return .ignored }
             if editor.tool == .crop { editor.applyCrop() } else { editor.tool = .none }
@@ -118,6 +129,30 @@ struct CanvasView: View {
             }
         }
         .frame(width: size.width, height: size.height)
+    }
+
+    /// Moves (or with ⇧, resizes) the crop by 1% so cropping works without a mouse.
+    private func nudgeCrop(_ key: KeyEquivalent, resize: Bool) {
+        let step = 0.01
+        var dx = 0.0, dy = 0.0
+        switch key {
+        case .leftArrow: dx = -step
+        case .rightArrow: dx = step
+        case .upArrow: dy = -step
+        default: dy = step
+        }
+        var r = editor.cropDraft
+        if resize {
+            r.width += dx
+            r.height += dy
+            if let a = editor.normalizedCropAspect {
+                if dx != 0 { r.height = r.width / a } else { r.width = r.height * a }
+            }
+        } else {
+            r.x += dx
+            r.y += dy
+        }
+        editor.cropDraft = r.clamped(minSize: 0.03)
     }
 
     /// Dragging the photo out hands over an edited JPEG copy (or the original if unedited).

@@ -18,6 +18,11 @@ struct FotolarkApp: App {
         Settings {
             SettingsView(model: model)
         }
+
+        Window("Keyboard Shortcuts", id: "shortcuts") {
+            ShortcutsView()
+        }
+        .windowResizability(.contentSize)
     }
 }
 

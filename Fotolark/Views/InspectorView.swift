@@ -204,6 +204,7 @@ struct SliderRow: View {
             .controlSize(.small)
             .accessibilityLabel(title)
             .accessibilityValue(display(value))
+            .accessibilityAction(named: "Reset") { editor.setAdjustment(key, to: defaultValue, label: title) }
         }
     }
 

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct FotolarkCommands: Commands {
     let model: AppModel
+    @Environment(\.openWindow) private var openWindow
     @AppStorage("showInspector") private var showInspector = true
     @AppStorage("neutralGrayBackground") private var neutralGray = false
     @AppStorage("showInfo") private var showInfo = true
@@ -11,6 +12,11 @@ struct FotolarkCommands: Commands {
     private var editor: PhotoEditor? { model.editor }
 
     var body: some Commands {
+        CommandGroup(replacing: .help) {
+            Button("Keyboard Shortcuts") { openWindow(id: "shortcuts") }
+                .keyboardShortcut("/")
+        }
+
         CommandGroup(replacing: .newItem) {
             Button("Open…") { model.showOpenPanel() }
                 .keyboardShortcut("o")

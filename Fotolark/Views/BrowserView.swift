@@ -144,6 +144,7 @@ final class ActionItem: NSMenuItem {
 struct FilmstripView: View {
     @Bindable var model: AppModel
     let current: URL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -161,7 +162,13 @@ struct FilmstripView: View {
             }
             .scrollIndicators(.hidden)
             .onAppear { proxy.scrollTo(current, anchor: .center) }
-            .onChange(of: current) { withAnimation { proxy.scrollTo(current, anchor: .center) } }
+            .onChange(of: current) {
+                if reduceMotion {
+                    proxy.scrollTo(current, anchor: .center)
+                } else {
+                    withAnimation { proxy.scrollTo(current, anchor: .center) }
+                }
+            }
         }
         .frame(height: 76)
         .background(.bar)

@@ -7,7 +7,8 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
 ## Status
 
 - Phase 1 (core editor): built; waiting on the "edit 20 of your own photos" gate.
-- Phase 2 (import and bulk tools), in batches:
+- Phase 2 (import and bulk tools): built; waiting on the "a 10,000-photo folder
+  scrolls smoothly" gate. Batches:
   1. Browsing — watched folders, thumbnail grid, filmstrip, Info panel, live updates,
      file operations, Settings: **built**
   2. White balance picker, sharpness/clarity/structure, vignette, histogram,
@@ -18,7 +19,7 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
      preview: **built**
   5. Import from iPhone, camera, SD card, drives and folders (new only, date range,
      date folders, rename, HEIC → JPEG, skip duplicates, verified delete): **built**
-  6. Shortcut cheat sheet and accessibility pass
+  6. Keyboard shortcuts list (⌘/), keyboard cropping, accessibility pass: **built**
 
 ## Build and test
 
