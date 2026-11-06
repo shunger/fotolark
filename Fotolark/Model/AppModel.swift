@@ -566,6 +566,26 @@ final class AppModel {
         }
     }
 
+    func bulkEditDetails(_ photos: [URL], changes: MetadataChanges) {
+        let backups = backupDirectory
+        jobs.run("Update details of \(photos.count) photos", items: photos, maxConcurrent: 2,
+                 name: { $0.lastPathComponent }) { url in
+            try MetadataEditor.apply(changes, to: url, backupDirectory: backups)
+        }
+    }
+
+    func bulkApplyEdits(_ photos: [URL], edits: EditRecipe, title: String, addOnly: Bool) {
+        if let editor, photos == [editor.url] {
+            if addOnly { editor.toggleAutoFix(.magicFix) } else { editor.paste(edits) }
+            return
+        }
+        let store = store
+        let engine = engine
+        jobs.run("\(title) on \(photos.count) photos", items: photos, name: { $0.lastPathComponent }) { url in
+            try BulkTools.applyEdits(edits, to: url, store: store, engine: engine, addOnly: addOnly)
+        }
+    }
+
     func bulkTransfer(_ photos: [URL], copy: Bool, to folder: URL, dateFolders: DateFolderPattern?, dates: [URL: Date]) {
         if !copy { closeEditor() }
         let store = store

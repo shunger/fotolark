@@ -29,6 +29,14 @@ public struct ImportCandidate: Hashable, Identifiable, Sendable {
         return type.conforms(to: .image)
     }
 
+    public var isVideo: Bool {
+        guard let type else { return false }
+        return type.conforms(to: .movie) || type.conforms(to: .audiovisualContent)
+    }
+
+    /// File name without extension, for pairing a Live Photo's still with its clip.
+    public var baseName: String { (name as NSString).deletingPathExtension.lowercased() }
+
     public var isHEIC: Bool {
         guard let type else { return false }
         return type.conforms(to: .heic) || type.conforms(to: .heif)
@@ -46,6 +54,10 @@ public struct ImportOptions: Codable, Equatable, Sendable {
     public var jpegQuality = 0.92
     /// Leave out photos already imported before or already in the destination.
     public var skipDuplicates = true
+    /// Also import videos (copied as they are).
+    public var includeVideos = false
+    /// For Live Photos, also import the short video clip next to the still.
+    public var includeLiveClips = false
 
     public init() {}
 }
@@ -118,6 +130,13 @@ public enum Importer {
         let name = fileName(for: c, index: index, options: options)
         var placed = Placed(files: [], verified: false, undo: [])
 
+        if c.isVideo {
+            // Videos are copied as they are, and only renamed if asked.
+            let target = PhotoFileOperations.availableURL(for: name, in: folder)
+            try FileManager.default.moveItem(at: downloaded, to: target)
+            let size = (try? target.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+            return Placed(files: [target], verified: c.fileSize <= 0 || size == c.fileSize, undo: [.removeCreatedFile(target)])
+        }
         if options.convertHEICToJPEG && c.isHEIC {
             let jpeg = try ImageExporter.encode(source: downloaded, recipe: EditRecipe(),
                                                 options: ExportOptions(format: .jpeg, quality: options.jpegQuality),
@@ -145,5 +164,33 @@ public enum Importer {
             placed.verified = (c.fileSize <= 0 || size == c.fileSize) && (try? ImageLoader.info(for: target)) != nil
         }
         return placed
+    }
+}
+
+extension Importer {
+    /// Which candidates to show and import: stills always; Live Photo clips (videos with
+    /// the same name as a still) only with `includeLiveClips`, and other videos only with
+    /// `includeVideos`. Returns the stills/videos to show and, per still, its clip.
+    public static func plan(_ all: [ImportCandidate], options: ImportOptions)
+        -> (shown: [ImportCandidate], clips: [ImportCandidate.ID: ImportCandidate]) {
+        let stillNames = Set(all.filter(\.isPhoto).map(\.baseName))
+        var clipsByName: [String: ImportCandidate] = [:]
+        var shown: [ImportCandidate] = []
+        for c in all {
+            if c.isPhoto {
+                shown.append(c)
+            } else if c.isVideo {
+                if stillNames.contains(c.baseName) {
+                    clipsByName[c.baseName] = c
+                } else if options.includeVideos {
+                    shown.append(c)
+                }
+            }
+        }
+        var clips: [ImportCandidate.ID: ImportCandidate] = [:]
+        if options.includeLiveClips {
+            for c in shown where c.isPhoto { if let clip = clipsByName[c.baseName] { clips[c.id] = clip } }
+        }
+        return (shown, clips)
     }
 }

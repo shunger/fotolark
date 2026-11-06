@@ -3,7 +3,7 @@ import FotolarkKit
 import SwiftUI
 
 enum BulkTool: String, CaseIterable, Identifiable {
-    case convert, resize, rename, rotate, move
+    case convert, resize, rename, rotate, move, details, autoFix
 
     var id: String { rawValue }
 
@@ -14,6 +14,8 @@ enum BulkTool: String, CaseIterable, Identifiable {
         case .rename: "Rename"
         case .rotate: "Rotate"
         case .move: "Move or Copy"
+        case .details: "Edit Details"
+        case .autoFix: "Magic Fix or Preset"
         }
     }
 
@@ -24,6 +26,8 @@ enum BulkTool: String, CaseIterable, Identifiable {
         case .rename: "character.cursor.ibeam"
         case .rotate: "rotate.right"
         case .move: "folder"
+        case .details: "calendar.badge.clock"
+        case .autoFix: "wand.and.stars"
         }
     }
 }
@@ -61,13 +65,24 @@ struct BulkSheet: View {
     @AppStorage("bulk.dateStyle") private var dateStyle: DateFolderPattern.Style = .yearThenDay
     @State private var eventName = ""
 
+    // Edit details
+    @State private var shiftDays = 0
+    @State private var shiftHours = 0
+    @State private var shiftMinutes = 0
+    @State private var keywords = ""
+    @State private var removeLocation = false
+
+    // Magic fix or preset
+    @State private var presetID: UUID?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Picker("Tool", selection: $tool) {
                 ForEach(BulkTool.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
             .labelsHidden()
+            .fixedSize()
 
             Text(subtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
@@ -152,6 +167,28 @@ struct BulkSheet: View {
             .pickerStyle(.segmented)
             Text("Turning is an edit like any other: the photo files aren’t rewritten. Photos already show the way the camera held them.")
                 .font(.caption).foregroundStyle(.secondary)
+        case .details:
+            LabeledContent("Shift dates by") {
+                HStack {
+                    Stepper("\(shiftDays) days", value: $shiftDays, in: -3650...3650)
+                    Stepper("\(shiftHours) h", value: $shiftHours, in: -23...23)
+                    Stepper("\(shiftMinutes) min", value: $shiftMinutes, in: -59...59)
+                }
+            }
+            TextField("Add tags (comma separated)", text: $keywords)
+            Toggle("Remove location", isOn: $removeLocation)
+            Label("This changes the photo files themselves (only their details, not the picture). A backup of each file is kept, so the job can be undone.",
+                  systemImage: "exclamationmark.triangle")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        case .autoFix:
+            Picker("Apply", selection: $presetID) {
+                Text("Magic fix").tag(UUID?.none)
+                ForEach(model.editPresets) { Text($0.name).tag(UUID?.some($0.id)) }
+            }
+            Text(presetID == nil
+                 ? "Adds Magic fix to each photo, worked out for that photo. Its other edits stay."
+                 : "Replaces each photo's tone, color and looks with the preset's; crops, turns and retouching stay.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         case .move:
             Picker("Action", selection: $copy) {
                 Text("Move").tag(false)
@@ -244,6 +281,20 @@ struct BulkSheet: View {
                 Line(id: i, from: url.lastPathComponent, to: turns == 2 ? "upside down" : turns < 0 ? "turned left" : "turned right",
                      problem: nil)
             }
+        case .details:
+            let f = DateFormatter()
+            f.dateStyle = .medium
+            f.timeStyle = .short
+            return shown.enumerated().map { i, url in
+                let d = dates[url]
+                let to = d.map { f.string(from: $0.addingTimeInterval(shiftSeconds)) } ?? "no date"
+                return Line(id: i, from: d.map { "\(url.lastPathComponent) · \(f.string(from: $0))" } ?? url.lastPathComponent,
+                            to: shiftSeconds == 0 ? (keywordList.isEmpty && !removeLocation ? "unchanged" : "details updated") : to,
+                            problem: nil)
+            }
+        case .autoFix:
+            let name = presetID.flatMap { id in model.editPresets.first { $0.id == id }?.name } ?? "Magic fix"
+            return shown.enumerated().map { i, url in Line(id: i, from: url.lastPathComponent, to: name, problem: nil) }
         case .move:
             let pattern = useDateFolders ? DateFolderPattern(style: dateStyle, eventName: eventName) : nil
             let root = destination ?? URL(fileURLWithPath: "/Destination")
@@ -291,6 +342,14 @@ struct BulkSheet: View {
                          height: Int((Double(current.height) * s).rounded())).description
     }
 
+    private var shiftSeconds: TimeInterval {
+        TimeInterval(shiftDays * 86400 + shiftHours * 3600 + shiftMinutes * 60)
+    }
+
+    private var keywordList: [String] {
+        keywords.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
     private func refreshRenamePreview() {
         preview = RenamePlan.preview(rule, photos: photos, dates: dates)
     }
@@ -305,6 +364,8 @@ struct BulkSheet: View {
         case .rename: return "Renames \(n). Edits move with each photo."
         case .rotate: return "Turns \(n)."
         case .move: return copy ? "Copies \(n) to another folder, with their edits." : "Moves \(n) to another folder, with their edits."
+        case .details: return "Fixes the date, adds tags or removes the location stored in \(n)."
+        case .autoFix: return "Applies Magic fix or a saved preset to \(n)."
         }
     }
 
@@ -315,6 +376,8 @@ struct BulkSheet: View {
         case .rename: "Rename \(preview.filter { $0.problem == nil && !$0.isUnchanged }.count)"
         case .rotate: "Rotate"
         case .move: copy ? "Copy" : "Move"
+        case .details: "Update Details"
+        case .autoFix: "Apply"
         }
     }
 
@@ -323,6 +386,7 @@ struct BulkSheet: View {
         switch tool {
         case .rename: return preview.contains { $0.problem == nil && !$0.isUnchanged }
         case .move: return destination != nil
+        case .details: return shiftSeconds != 0 || !keywordList.isEmpty || removeLocation
         case .resize: return resizeByPercent ? percent > 0 : longestSide > 0
         default: return true
         }
@@ -341,6 +405,16 @@ struct BulkSheet: View {
             model.bulkRename(preview)
         case .rotate:
             model.bulkRotate(photos, turns: turns)
+        case .details:
+            var changes = MetadataChanges()
+            changes.shiftSeconds = shiftSeconds
+            changes.addKeywords = keywordList
+            changes.removeLocation = removeLocation
+            model.bulkEditDetails(photos, changes: changes)
+        case .autoFix:
+            let edits = presetID.flatMap { id in model.editPresets.first { $0.id == id }?.recipe }
+                ?? EditRecipe().setting(.magicFix(FilterChain(steps: [FilterStep(name: "CIVibrance", parameters: [:])])))
+            model.bulkApplyEdits(photos, edits: edits, title: presetID == nil ? "Magic fix" : "Preset", addOnly: presetID == nil)
         case .move:
             guard let destination else { return }
             model.bulkTransfer(photos, copy: copy, to: destination,

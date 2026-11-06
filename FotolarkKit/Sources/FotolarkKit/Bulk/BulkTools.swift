@@ -61,6 +61,23 @@ public enum BulkTools {
         ExportFormat(typeIdentifier: (try? ImageLoader.info(for: photo))?.typeIdentifier) ?? .jpeg
     }
 
+    // MARK: Auto-fix or preset
+
+    /// Applies Magic fix, or a preset's tone/color/looks, to one photo, working its
+    /// one-click fixes out for that photo. Undo restores the previous edits.
+    /// With `addOnly`, the edits are added on top (Magic fix keeps the photo's own slider
+    /// settings); otherwise they replace the photo's tone, color and looks (a preset).
+    public static func applyEdits(_ edits: EditRecipe, to photo: URL, store: RecipeStore, engine: EditEngine,
+                                  addOnly: Bool = false) throws -> [UndoStep] {
+        let old = store.load(for: photo)
+        let preview = try ImageLoader.loadPreview(photo, maxPixelSize: 1024)
+        let base = old ?? EditRecipe()
+        let merged = addOnly ? edits.operations.reduce(base) { $0.setting($1) } : base.pasting(edits)
+        let recipe = engine.recomputingAutoFixes(merged, for: preview)
+        try store.save(recipe, for: photo)
+        return [.restoreRecipe(photo, old)]
+    }
+
     // MARK: Rotate
 
     /// Turns a photo by changing its edits (the file itself isn't rewritten).

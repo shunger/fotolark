@@ -8,6 +8,8 @@ public enum UndoStep: Equatable, Sendable {
     case moveBack(current: URL, original: URL)
     /// A photo's edits before the job changed them (nil = no edits).
     case restoreRecipe(URL, EditRecipe?)
+    /// A file the job rewrote; undo copies the backup back over it.
+    case restoreFile(backup: URL, original: URL)
 }
 
 /// A photo the job left out, and why.
@@ -117,6 +119,11 @@ public enum BulkRunner {
                 } catch { fail(url, error) }
             case .restoreRecipe(let url, let recipe):
                 do { try store.save(recipe ?? EditRecipe(), for: url) } catch { fail(url, error) }
+            case .restoreFile(let backup, let original):
+                do {
+                    let data = try Data(contentsOf: backup)
+                    try data.write(to: original)
+                } catch { fail(original, error) }
             case .moveBack:
                 break
             }

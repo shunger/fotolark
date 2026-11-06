@@ -28,7 +28,7 @@ struct ImportView: View {
     @AppStorage("import.thumbSize") private var thumbSize = 150.0
 
     private var photos: [ImportCandidate] {
-        source.candidates.filter(\.isPhoto).filter { c in
+        Importer.plan(source.candidates, options: options).shown.filter { c in
             switch filter {
             case .all: return true
             case .new: return !model.importHistory.contains(c)
@@ -39,7 +39,23 @@ struct ImportView: View {
         }
     }
 
-    private var videoCount: Int { source.candidates.filter { !$0.isPhoto }.count }
+    private var clips: [ImportCandidate.ID: ImportCandidate] { Importer.plan(source.candidates, options: options).clips }
+
+    /// Videos not shown (other videos, unless "Import videos" is on).
+    private var videoCount: Int {
+        options.includeVideos ? 0 : source.candidates.filter { $0.isVideo }.count - liveClipCount
+    }
+
+    /// Names of stills that have a Live Photo clip.
+    private var liveStillNames: Set<String> {
+        let stills = Set(source.candidates.filter(\.isPhoto).map(\.baseName))
+        return Set(source.candidates.filter { $0.isVideo && stills.contains($0.baseName) }.map(\.baseName))
+    }
+
+    private var liveClipCount: Int {
+        let stills = Set(source.candidates.filter(\.isPhoto).map(\.baseName))
+        return source.candidates.filter { $0.isVideo && stills.contains($0.baseName) }.count
+    }
 
     /// Selected photos, or all shown if none are selected.
     private var chosen: [ImportCandidate] {
@@ -95,7 +111,8 @@ struct ImportView: View {
         if source.isLoading { return "Reading photos…" }
         var parts = ["\(photos.count) shown"]
         if !selection.isEmpty { parts.append("\(selection.count) selected") }
-        if videoCount > 0 { parts.append("\(videoCount) videos not shown (video import comes later)") }
+        if videoCount > 0 { parts.append("\(videoCount) videos hidden") }
+        if liveClipCount > 0 { parts.append("\(liveClipCount) Live Photos") }
         return parts.joined(separator: " · ")
     }
 
@@ -113,10 +130,12 @@ struct ImportView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
+                let live = liveStillNames
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbSize), spacing: 10)], spacing: 10) {
                     ForEach(photos) { c in
                         ImportCell(source: source, candidate: c, isSelected: selection.contains(c.id),
-                                   alreadyImported: model.importHistory.contains(c), size: thumbSize)
+                                   alreadyImported: model.importHistory.contains(c), size: thumbSize,
+                                   isLive: c.isPhoto && live.contains(c.baseName))
                             .onTapGesture {
                                 if selection.contains(c.id) { selection.remove(c.id) } else { selection.insert(c.id) }
                             }
@@ -159,6 +178,9 @@ struct ImportView: View {
                     Toggle("Keep the HEIC original too", isOn: $options.keepHEICOriginal)
                 }
                 Toggle("Skip photos already imported", isOn: $options.skipDuplicates)
+                Toggle("Import videos", isOn: $options.includeVideos)
+                Toggle("Live Photos: also import the video clip", isOn: $options.includeLiveClips)
+                    .help("A Live Photo is a still plus a short clip. Off imports just the still.")
 
                 Divider()
                 Toggle("Delete from \(source.title) after importing", isOn: $deleteAfter)
@@ -210,7 +232,9 @@ struct ImportView: View {
             o.rename = nil
         }
         Self.savedOptions = o
-        model.runImport(chosen, from: source, options: o, to: destination, deleteAfter: deleteAfter)
+        // Each chosen Live Photo still brings its clip along when asked.
+        let withClips = chosen.flatMap { c in [c] + (clips[c.id].map { [$0] } ?? []) }
+        model.runImport(withClips, from: source, options: o, to: destination, deleteAfter: deleteAfter)
         selection = []
     }
 
@@ -230,6 +254,7 @@ private struct ImportCell: View {
     let isSelected: Bool
     let alreadyImported: Bool
     let size: Double
+    let isLive: Bool
 
     var body: some View {
         VStack(spacing: 4) {
@@ -239,9 +264,19 @@ private struct ImportCell: View {
                         Image(decorative: image, scale: 1).resizable().scaledToFit()
                     } else {
                         RoundedRectangle(cornerRadius: 4).fill(.quaternary)
+                            .overlay { if candidate.isVideo { Image(systemName: "video").font(.title).foregroundStyle(.secondary) } }
                     }
                 }
                 .frame(width: size, height: size * 0.75)
+                .overlay(alignment: .bottomLeading) {
+                    if isLive || candidate.isVideo {
+                        Label(candidate.isVideo ? "Video" : "Live", systemImage: candidate.isVideo ? "video.fill" : "livephoto")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(.regularMaterial, in: Capsule())
+                            .padding(4)
+                    }
+                }
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title2)

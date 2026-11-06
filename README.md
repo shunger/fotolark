@@ -21,13 +21,14 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
      date folders, rename, HEIC → JPEG, skip duplicates, verified delete): **built**
   6. Keyboard shortcuts list (⌘/), keyboard cropping, accessibility pass: **built**
 
-- Phase 3 (retouch and creative), in batches:
+- Phase 3 (retouch and creative): built; waiting on the "retouching looks natural
+  on real photos" gate. Batches:
   1. RAW, noise reduction, curves, levels, HSL color ranges: **built**
   2. Auto-straighten, auto-crop, red-eye removal: **built**
   3. Spot heal, clone stamp, soften skin: **built**
   4. Looks with strength, focal B&W, custom presets, text, watermark: **built**
   5. Compare view: **built**
-  6. Live Photos and video import, bulk metadata, bulk auto-fix/preset
+  6. Live Photos and video import, bulk metadata, bulk auto-fix/preset: **built**
 
 ## Build and test
 

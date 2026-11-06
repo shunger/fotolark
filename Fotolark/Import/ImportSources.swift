@@ -202,18 +202,29 @@ final class FolderImportSource: ImportSource {
         self.folder = folder
         store = thumbnails
         Task {
-            let found = await Task.detached(priority: .userInitiated) { [folder] in
-                PhotoScanner.folders(under: folder).flatMap { PhotoScanner.photos(in: $0.url) }
+            candidates = await Task.detached(priority: .userInitiated) { [folder] in
+                Self.scan(folder)
             }.value
-            candidates = found.map {
-                ImportCandidate(id: $0.url.path, name: $0.name, fileSize: $0.fileSize,
-                                date: PhotoMetadata.dateTaken($0.url) ?? $0.created,
-                                typeIdentifier: UTType(filenameExtension: $0.url.pathExtension)?.identifier)
-            }
-            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
             isLoading = false
             statusMessage = candidates.isEmpty ? "No photos found in “\(folder.lastPathComponent)”." : nil
         }
+    }
+
+    /// Photos and videos anywhere under `folder` (hidden files and packages skipped).
+    nonisolated static func scan(_ folder: URL) -> [ImportCandidate] {
+        let keys: [URLResourceKey] = [.fileSizeKey, .creationDateKey, .isRegularFileKey]
+        guard let e = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys,
+                                                     options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+        var out: [ImportCandidate] = []
+        for case let url as URL in e {
+            guard let v = try? url.resourceValues(forKeys: Set(keys)), v.isRegularFile == true,
+                  let type = UTType(filenameExtension: url.pathExtension),
+                  type.conforms(to: .image) || type.conforms(to: .movie) else { continue }
+            let date = type.conforms(to: .image) ? PhotoMetadata.dateTaken(url) : nil
+            out.append(ImportCandidate(id: url.path, name: url.lastPathComponent, fileSize: Int64(v.fileSize ?? 0),
+                                       date: date ?? v.creationDate, typeIdentifier: type.identifier))
+        }
+        return out.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 
     var title: String { folder.lastPathComponent }
@@ -226,6 +237,7 @@ final class FolderImportSource: ImportSource {
         guard thumbnails[id] == nil, !requested.contains(id) else { return }
         requested.insert(id)
         let url = URL(fileURLWithPath: id)
+        guard ImageLoader.canOpen(url) else { return }  // videos show an icon instead
         guard let v = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .creationDateKey]) else { return }
         let photo = ScannedPhoto(url: url, fileSize: Int64(v.fileSize ?? 0), modified: v.contentModificationDate ?? .distantPast,
                                  created: v.creationDate ?? .distantPast)
