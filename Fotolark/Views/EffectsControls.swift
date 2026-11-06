@@ -59,6 +59,13 @@ struct EffectsControls: View {
                 .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
             }
 
+            Button {
+                editor.beginTiltShift()
+            } label: {
+                Label(editor.recipe.tiltShift == nil ? "Tilt-Shift…" : "Edit Tilt-Shift…", systemImage: "camera.metering.center.weighted")
+            }
+            .help("Make the scene look like a tiny model: a sharp band with blur above and below")
+
             HStack {
                 Menu("Presets") {
                     if model.editPresets.isEmpty {

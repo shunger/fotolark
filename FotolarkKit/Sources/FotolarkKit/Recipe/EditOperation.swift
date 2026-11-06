@@ -2,6 +2,8 @@ import Foundation
 
 /// One step in an edit recipe. Operations are replayed in order through Core Image.
 public enum EditOperation: Equatable, Sendable {
+    /// Lens distortion and color-fringe fixes, applied first, before anything else.
+    case lens(LensCorrection)
     /// One-click "Magic fix": the filter chain Core Image suggested for this photo, frozen
     /// at the moment it was applied so replaying the recipe always gives the same result.
     case magicFix(FilterChain)
@@ -23,8 +25,12 @@ public enum EditOperation: Equatable, Sendable {
     case curves(Curves)
     /// Hue, saturation and lightness per color range.
     case colorRanges(ColorRanges)
+    /// Brush and gradient adjustments, on the original photo.
+    case local([LocalAdjustment])
     /// One-click looks, stacked in order.
     case looks([Look])
+    /// Miniature-style focus band.
+    case tiltShift(TiltShift)
     /// 90° turns and flips.
     case orient(Orientation)
     /// Straighten by an angle in degrees (positive = clockwise). The result is cropped to
@@ -39,7 +45,8 @@ public enum EditOperation: Equatable, Sendable {
 
     /// The kind of an operation; a recipe holds at most one operation of each kind.
     public enum Kind: String, Codable, CaseIterable, Sendable, Comparable {
-        case magicFix, autoContrast, autoColor, whiteBalance, redEye, retouch, adjust, levels, curves, colorRanges, looks, orient, straighten, crop, text, resize
+        case lens, magicFix, autoContrast, autoColor, whiteBalance, redEye, retouch, adjust, levels, curves, colorRanges,
+             local, looks, tiltShift, orient, straighten, crop, text, resize
 
         /// Canonical position in a recipe: tone and color first, then geometry, then size.
         var order: Int { Kind.allCases.firstIndex(of: self)! }
@@ -56,6 +63,9 @@ public enum EditOperation: Equatable, Sendable {
 
     public var kind: Kind {
         switch self {
+        case .lens: .lens
+        case .local: .local
+        case .tiltShift: .tiltShift
         case .magicFix: .magicFix
         case .autoContrast: .autoContrast
         case .autoColor: .autoColor
@@ -78,6 +88,9 @@ public enum EditOperation: Equatable, Sendable {
     /// True when the operation would not change the image (e.g. all sliders at zero).
     public var isIdentity: Bool {
         switch self {
+        case .lens(let l): l.isIdentity
+        case .local(let l): l.isEmpty
+        case .tiltShift(let t): t.blur == 0 && t.vivid == 0
         case .magicFix(let chain): chain.steps.isEmpty
         case .autoContrast(let levels): levels == .identity
         case .autoColor(let gains): gains == .identity
@@ -109,6 +122,9 @@ extension EditOperation: Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let kind = try c.decode(Kind.self, forKey: .op)
         switch kind {
+        case .lens: self = .lens(try c.decode(LensCorrection.self, forKey: .value))
+        case .local: self = .local(try c.decode([LocalAdjustment].self, forKey: .value))
+        case .tiltShift: self = .tiltShift(try c.decode(TiltShift.self, forKey: .value))
         case .magicFix: self = .magicFix(try c.decode(FilterChain.self, forKey: .value))
         case .autoContrast: self = .autoContrast(try c.decode(Levels.self, forKey: .value))
         case .autoColor: self = .autoColor(try c.decode(ChannelGains.self, forKey: .value))
@@ -132,6 +148,9 @@ extension EditOperation: Codable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(kind, forKey: .op)
         switch self {
+        case .lens(let v): try c.encode(v, forKey: .value)
+        case .local(let v): try c.encode(v, forKey: .value)
+        case .tiltShift(let v): try c.encode(v, forKey: .value)
         case .magicFix(let v): try c.encode(v, forKey: .value)
         case .autoContrast(let v): try c.encode(v, forKey: .value)
         case .autoColor(let v): try c.encode(v, forKey: .value)

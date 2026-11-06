@@ -85,12 +85,19 @@ extension RecipeRenderer {
         ]).cropped(to: e)
     }
 
-    /// Soft-edged dabs along the stroke, close enough together to form a smooth line.
     static func strokeMask(_ s: RetouchStroke, in e: CGRect) -> CIImage? {
+        dabMask(points: s.points, radius: s.radius, in: e)
+    }
+
+    /// Soft-edged dabs along a brush path, close enough together to form a smooth line.
+    /// `radius` is a fraction of the longest side.
+    static func dabMask(points: [CurvePoint], radius: Double, in e: CGRect) -> CIImage? {
+        guard !points.isEmpty else { return nil }
         let longest = max(e.width, e.height)
-        let r = s.radius * longest
+        let r = radius * longest
+        guard r >= 0.5 else { return nil }
         var centers: [CGPoint] = []
-        let pts = s.points.map { CGPoint(x: e.minX + $0.x * e.width, y: e.maxY - $0.y * e.height) }
+        let pts = points.map { CGPoint(x: e.minX + $0.x * e.width, y: e.maxY - $0.y * e.height) }
         centers.append(pts[0])
         let spacing = max(r * 0.35, 0.5)
         for (a, b) in zip(pts, pts.dropFirst()) {

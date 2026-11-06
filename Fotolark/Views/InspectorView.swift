@@ -16,6 +16,8 @@ struct InspectorView: View {
                 case .redEye: RedEyePanel(editor: editor)
                 case .retouch: RetouchPanel(editor: editor)
                 case .text: TextPanel(editor: editor)
+                case .local: LocalPanel(editor: editor)
+                case .tiltShift: TiltShiftPanel(editor: editor)
                 case .focus:
                     VStack(alignment: .leading, spacing: 14) {
                         Text("Focal B&W").font(.headline)
@@ -68,6 +70,21 @@ struct InspectorView: View {
                 editor.beginRedEye()
             }
             SliderRow(editor: editor, title: "Fill light", key: \.fillLight, range: 0...1, format: "%.0f")
+        }
+
+        InspectorSection("Brush and gradient") {
+            HStack(spacing: 6) {
+                FixButton(title: "Brush", systemImage: "paintbrush.pointed",
+                          isOn: editor.localAdjustments.contains { $0.kind == .brush },
+                          help: "Paint brightness, color or blur onto part of the photo") {
+                    editor.beginLocal(editor.localAdjustments.contains { $0.kind == .brush } ? nil : .brush)
+                }
+                FixButton(title: "Gradient", systemImage: "square.bottomhalf.filled",
+                          isOn: editor.localAdjustments.contains { $0.kind == .gradient },
+                          help: "Fade an adjustment across the photo, for example to darken a bright sky") {
+                    editor.beginLocal(editor.localAdjustments.contains { $0.kind == .gradient } ? nil : .gradient)
+                }
+            }
         }
 
         InspectorSection("Crop and rotate") {
@@ -131,6 +148,8 @@ struct InspectorView: View {
         DisclosureSection("Curves") { CurvesEditor(editor: editor) }
         DisclosureSection("Levels") { LevelsControls(editor: editor) }
         DisclosureSection("Color ranges") { ColorRangeControls(editor: editor) }
+
+        DisclosureSection("Lens correction") { LensControls(editor: editor) }
 
         InspectorSection("Vignette") {
             SliderRow(editor: editor, title: "Amount", key: \.vignette)

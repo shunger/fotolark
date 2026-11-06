@@ -110,6 +110,10 @@ struct CanvasView: View {
                 RetouchOverlay(editor: editor)
             case .focus:
                 FocusOverlay(editor: editor)
+            case .local:
+                LocalOverlay(editor: editor)
+            case .tiltShift:
+                TiltShiftOverlay(editor: editor)
             case .text:
                 TextOverlayEditor(editor: editor)
             case .redEye:

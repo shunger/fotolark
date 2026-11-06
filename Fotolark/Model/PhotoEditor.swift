@@ -13,7 +13,7 @@ struct SendableImage: @unchecked Sendable {
 /// and saves the recipe to the sidecar file.
 @MainActor @Observable
 final class PhotoEditor {
-    enum Tool { case none, crop, straighten, whiteBalance, redEye, retouch, focus, text }
+    enum Tool { case none, crop, straighten, whiteBalance, redEye, retouch, focus, text, local, tiltShift }
 
     /// Longest side of the copy used while editing; full resolution is loaded only for
     /// close-up zoom and export.
@@ -279,6 +279,13 @@ final class PhotoEditor {
             }
         }
     }
+
+    // MARK: Brush and gradient adjustments
+
+    /// The brush or gradient being worked on.
+    var selectedLocalID: UUID?
+    /// Brush strokes take the effect away instead of adding it.
+    var localErase = false
 
     // MARK: Retouching
 

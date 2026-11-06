@@ -45,6 +45,21 @@ public struct EditRecipe: Codable, Equatable, Sendable {
         return nil
     }
 
+    public var lens: LensCorrection {
+        if case .lens(let l) = operation(.lens) { return l }
+        return LensCorrection()
+    }
+
+    public var localAdjustments: [LocalAdjustment] {
+        if case .local(let l) = operation(.local) { return l }
+        return []
+    }
+
+    public var tiltShift: TiltShift? {
+        if case .tiltShift(let t) = operation(.tiltShift) { return t }
+        return nil
+    }
+
     public var resize: ResizeSpec? {
         if case .resize(let r) = operation(.resize) { return r }
         return nil

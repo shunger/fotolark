@@ -13,7 +13,12 @@ let package = Package(
         .library(name: "FotolarkKit", targets: ["FotolarkKit"]),
     ],
     targets: [
-        .target(name: "FotolarkKit"),
+        .target(
+            name: "FotolarkKit",
+            // Pixel loops (such as lens correction) are too slow unoptimized, so the
+            // engine is optimized even in debug builds.
+            swiftSettings: [.unsafeFlags(["-O"], .when(configuration: .debug))]
+        ),
         .testTarget(name: "FotolarkKitTests", dependencies: ["FotolarkKit"]),
     ]
 )

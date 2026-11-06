@@ -119,6 +119,9 @@ struct FotolarkCommands: Commands {
                 Button("Red-Eye…") { editor?.beginRedEye(); model.zoomToFit() }
                 Button("Retouch…") { editor?.beginRetouch() }
                     .keyboardShortcut("h", modifiers: [.command, .option])
+                Button("Brush and Gradient…") { editor?.beginLocal(); model.zoomToFit() }
+                    .keyboardShortcut("g", modifiers: [.command, .option])
+                Button("Tilt-Shift…") { editor?.beginTiltShift(); model.zoomToFit() }
                 Button("Add Text…") { editor?.tool = .text; model.zoomToFit() }
                     .keyboardShortcut("x", modifiers: [.command, .option])
                 Button("Rotate Left") { editor?.rotate(clockwise: false) }

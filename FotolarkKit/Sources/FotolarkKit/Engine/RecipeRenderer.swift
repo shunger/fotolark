@@ -18,6 +18,9 @@ public enum RecipeRenderer {
 
     public static func apply(_ op: EditOperation, to image: CIImage) -> CIImage {
         switch op {
+        case .lens(let l): applyLens(l, to: image)
+        case .local(let l): applyLocal(l, to: image)
+        case .tiltShift(let t): applyTiltShift(t, to: image)
         case .magicFix(let chain): applyChain(chain, to: image)
         case .autoContrast(let levels): applyLevels(levels, to: image)
         case .autoColor(let gains): applyGains(gains, to: image)

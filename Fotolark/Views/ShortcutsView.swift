@@ -36,6 +36,7 @@ struct ShortcutsView: View {
             ("⌥⌘C", "Crop"),
             ("⌥⌘T", "Straighten"),
             ("⌥⌘H", "Retouch (spot heal, clone, soften skin)"),
+            ("⌥⌘G", "Brush and gradient adjustments (hold ⌥ to erase)"),
             ("⌥⌘X", "Add text"),
             ("⌘[ and ⌘]", "Rotate left or right"),
             ("⌥⌘R", "Resize"),
