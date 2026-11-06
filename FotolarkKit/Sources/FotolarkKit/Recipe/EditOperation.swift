@@ -13,6 +13,12 @@ public enum EditOperation: Equatable, Sendable {
     case whiteBalance(ChannelGains)
     /// Light and color sliders.
     case adjust(Adjustments)
+    /// Input and output levels.
+    case levels(ToneLevels)
+    /// Tone curves.
+    case curves(Curves)
+    /// Hue, saturation and lightness per color range.
+    case colorRanges(ColorRanges)
     /// 90° turns and flips.
     case orient(Orientation)
     /// Straighten by an angle in degrees (positive = clockwise). The result is cropped to
@@ -25,7 +31,7 @@ public enum EditOperation: Equatable, Sendable {
 
     /// The kind of an operation; a recipe holds at most one operation of each kind.
     public enum Kind: String, Codable, CaseIterable, Sendable, Comparable {
-        case magicFix, autoContrast, autoColor, whiteBalance, adjust, orient, straighten, crop, resize
+        case magicFix, autoContrast, autoColor, whiteBalance, adjust, levels, curves, colorRanges, orient, straighten, crop, resize
 
         /// Canonical position in a recipe: tone and color first, then geometry, then size.
         var order: Int { Kind.allCases.firstIndex(of: self)! }
@@ -47,6 +53,9 @@ public enum EditOperation: Equatable, Sendable {
         case .autoColor: .autoColor
         case .whiteBalance: .whiteBalance
         case .adjust: .adjust
+        case .levels: .levels
+        case .curves: .curves
+        case .colorRanges: .colorRanges
         case .orient: .orient
         case .straighten: .straighten
         case .crop: .crop
@@ -62,6 +71,9 @@ public enum EditOperation: Equatable, Sendable {
         case .autoColor(let gains): gains == .identity
         case .whiteBalance(let gains): gains == .identity
         case .adjust(let adjustments): adjustments == Adjustments()
+        case .levels(let l): l.isIdentity
+        case .curves(let c): c.isIdentity
+        case .colorRanges(let r): r.isIdentity
         case .orient(let orientation): orientation == .identity
         case .straighten(let degrees): degrees == 0
         case .crop(let rect): rect == .full
@@ -86,6 +98,9 @@ extension EditOperation: Codable {
         case .autoColor: self = .autoColor(try c.decode(ChannelGains.self, forKey: .value))
         case .whiteBalance: self = .whiteBalance(try c.decode(ChannelGains.self, forKey: .value))
         case .adjust: self = .adjust(try c.decode(Adjustments.self, forKey: .value))
+        case .levels: self = .levels(try c.decode(ToneLevels.self, forKey: .value))
+        case .curves: self = .curves(try c.decode(Curves.self, forKey: .value))
+        case .colorRanges: self = .colorRanges(try c.decode(ColorRanges.self, forKey: .value))
         case .orient: self = .orient(try c.decode(Orientation.self, forKey: .value))
         case .straighten: self = .straighten(degrees: try c.decode(Double.self, forKey: .value))
         case .crop: self = .crop(try c.decode(CropRect.self, forKey: .value))
@@ -102,6 +117,9 @@ extension EditOperation: Codable {
         case .autoColor(let v): try c.encode(v, forKey: .value)
         case .whiteBalance(let v): try c.encode(v, forKey: .value)
         case .adjust(let v): try c.encode(v, forKey: .value)
+        case .levels(let v): try c.encode(v, forKey: .value)
+        case .curves(let v): try c.encode(v, forKey: .value)
+        case .colorRanges(let v): try c.encode(v, forKey: .value)
         case .orient(let v): try c.encode(v, forKey: .value)
         case .straighten(let v): try c.encode(v, forKey: .value)
         case .crop(let v): try c.encode(v, forKey: .value)
@@ -141,6 +159,10 @@ public struct Adjustments: Codable, Equatable, Sendable {
     public var vignette: Double = 0
     /// How far the vignette reaches in from the corners, 0…1.
     public var vignetteSize: Double = 0.5
+    /// Smooths grainy brightness noise, 0…1.
+    public var noiseReduction: Double = 0
+    /// Smooths colored speckles, 0…1.
+    public var colorNoiseReduction: Double = 0
 
     public init() {}
 
@@ -166,6 +188,8 @@ public struct Adjustments: Codable, Equatable, Sendable {
         structure = try v(.structure)
         vignette = try v(.vignette)
         vignetteSize = try c.decodeIfPresent(Double.self, forKey: .vignetteSize) ?? 0.5
+        noiseReduction = try v(.noiseReduction)
+        colorNoiseReduction = try v(.colorNoiseReduction)
     }
 }
 

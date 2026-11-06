@@ -96,7 +96,13 @@ struct InspectorView: View {
             SliderRow(editor: editor, title: "Sharpness", key: \.sharpness, range: 0...1, format: "%.0f")
             SliderRow(editor: editor, title: "Clarity", key: \.clarity)
             SliderRow(editor: editor, title: "Structure", key: \.structure)
+            SliderRow(editor: editor, title: "Noise reduction", key: \.noiseReduction, range: 0...1, format: "%.0f")
+            SliderRow(editor: editor, title: "Color noise", key: \.colorNoiseReduction, range: 0...1, format: "%.0f")
         }
+
+        DisclosureSection("Curves") { CurvesEditor(editor: editor) }
+        DisclosureSection("Levels") { LevelsControls(editor: editor) }
+        DisclosureSection("Color ranges") { ColorRangeControls(editor: editor) }
 
         InspectorSection("Vignette") {
             SliderRow(editor: editor, title: "Amount", key: \.vignette)
@@ -392,5 +398,26 @@ struct HistogramView: View {
         let parts = [l[..<third].reduce(0, +), l[third..<(2 * third)].reduce(0, +), l[(2 * third)...].reduce(0, +)]
         let names = ["mostly dark tones", "mostly middle tones", "mostly bright tones"]
         return names[parts.firstIndex(of: parts.max()!)!]
+    }
+}
+
+/// A section that can be folded away, for the less-used tools. Remembers its state.
+struct DisclosureSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+    @AppStorage private var isExpanded: Bool
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+        _isExpanded = AppStorage(wrappedValue: false, "section.\(title)")
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            content.padding(.top, 6)
+        } label: {
+            Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+        }
     }
 }

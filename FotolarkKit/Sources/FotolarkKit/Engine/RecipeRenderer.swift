@@ -23,6 +23,12 @@ public enum RecipeRenderer {
         case .autoColor(let gains): applyGains(gains, to: image)
         case .whiteBalance(let gains): applyGains(gains, to: image)
         case .adjust(let a): applyAdjustments(a, to: image)
+        case .levels(let l): applyLookupCurves(red: l.value, green: l.value, blue: l.value, to: image)
+        case .curves(let c):
+            applyLookupCurves(red: { c.rgb.value(at: c.red.value(at: $0)) },
+                              green: { c.rgb.value(at: c.green.value(at: $0)) },
+                              blue: { c.rgb.value(at: c.blue.value(at: $0)) }, to: image)
+        case .colorRanges(let r): applyColorRanges(r, to: image)
         case .orient(let o): applyOrientation(o, to: image)
         case .straighten(let degrees): applyStraighten(degrees, to: image)
         case .crop(let rect): applyCrop(rect, to: image)
@@ -77,6 +83,45 @@ public enum RecipeRenderer {
     static func applyAdjustments(_ a: Adjustments, to image: CIImage) -> CIImage {
         var out = image
         let longest = max(image.extent.width, image.extent.height)
+
+        if a.noiseReduction > 0 {
+            // Core Image smooths differences below the noise level and sharpens the rest;
+            // sharpening is eased off as strength rises so it never amplifies grain.
+            let f = CIFilter.noiseReduction()
+            f.inputImage = out
+            f.noiseLevel = Float(0.01 + a.noiseReduction * 0.09)
+            f.sharpness = Float(0.4 * (1 - a.noiseReduction))
+            var smoothed = (f.outputImage ?? out).cropped(to: image.extent)
+            // Stronger settings add a median filter, which removes random grain but keeps edges.
+            if a.noiseReduction > 0.3 {
+                let median = smoothed.clampedToExtent().applyingFilter("CIMedianFilter").cropped(to: image.extent)
+                smoothed = smoothed.applyingFilter("CIDissolveTransition", parameters: [
+                    kCIInputTargetImageKey: median, kCIInputTimeKey: (a.noiseReduction - 0.3) / 0.7,
+                ]).cropped(to: image.extent)
+            }
+            out = smoothed
+        }
+        if a.colorNoiseReduction > 0 {
+            // Take each pixel's color from a blurred copy but keep its own brightness:
+            // result = blurred + (brightness(original) − brightness(blurred)).
+            let blurred = out.clampedToExtent()
+                .applyingGaussianBlur(sigma: max(2, longest * 0.004) * (0.5 + a.colorNoiseReduction * 1.5))
+                .cropped(to: image.extent)
+            func luminance(_ img: CIImage, sign: CGFloat) -> CIImage {
+                let w = CIVector(x: 0.2126 * sign, y: 0.7152 * sign, z: 0.0722 * sign, w: 0)
+                return img.applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": w, "inputGVector": w, "inputBVector": w,
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                ])
+            }
+            let colorOnly = luminance(out, sign: 1)
+                .applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: blurred])
+                .applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: luminance(blurred, sign: -1)])
+                .cropped(to: image.extent)
+            out = out.applyingFilter("CIDissolveTransition", parameters: [
+                kCIInputTargetImageKey: colorOnly, kCIInputTimeKey: min(a.colorNoiseReduction, 1),
+            ]).cropped(to: image.extent)
+        }
 
         if a.exposure != 0 {
             let f = CIFilter.exposureAdjust()
@@ -165,6 +210,54 @@ public enum RecipeRenderer {
         }
 
         return out.cropped(to: image.extent)
+    }
+
+    // MARK: Lookup tables
+
+    /// Per-channel curves as a lookup table, applied to gamma-encoded values.
+    static func applyLookupCurves(red: (Double) -> Double, green: (Double) -> Double, blue: (Double) -> Double,
+                                  to image: CIImage) -> CIImage {
+        let n = 1024
+        var table = [Float](repeating: 0, count: n * 3)
+        for i in 0..<n {
+            let x = Double(i) / Double(n - 1)
+            table[i * 3] = Float(red(x))
+            table[i * 3 + 1] = Float(green(x))
+            table[i * 3 + 2] = Float(blue(x))
+        }
+        let f = CIFilter.colorCurves()
+        f.inputImage = image
+        f.curvesData = table.withUnsafeBytes { Data($0) }
+        f.curvesDomain = CIVector(x: 0, y: 1)
+        f.colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        return f.outputImage ?? image
+    }
+
+    private static let cubeCache = CubeCache()
+
+    static func applyColorRanges(_ ranges: ColorRanges, to image: CIImage) -> CIImage {
+        let size = 32
+        let data = cubeCache.data(for: ranges) {
+            var cube = [Float](repeating: 0, count: size * size * size * 4)
+            var i = 0
+            for b in 0..<size {
+                for g in 0..<size {
+                    for r in 0..<size {
+                        let (nr, ng, nb) = ranges.apply(r: Double(r) / Double(size - 1), g: Double(g) / Double(size - 1),
+                                                        b: Double(b) / Double(size - 1))
+                        cube[i] = Float(nr); cube[i + 1] = Float(ng); cube[i + 2] = Float(nb); cube[i + 3] = 1
+                        i += 4
+                    }
+                }
+            }
+            return cube.withUnsafeBytes { Data($0) }
+        }
+        let f = CIFilter.colorCubeWithColorSpace()
+        f.inputImage = image
+        f.cubeDimension = Float(size)
+        f.cubeData = data
+        f.colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        return f.outputImage ?? image
     }
 
     /// Darkens (negative amount) or lightens (positive) toward the corners with a smooth
@@ -258,5 +351,20 @@ extension CIImage {
         let e = extent
         guard !e.isInfinite, e.origin != .zero else { return self }
         return transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY))
+    }
+}
+
+/// Remembers the most recent color cube, so dragging an unrelated slider doesn't
+/// rebuild it on every frame.
+final class CubeCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var key: ColorRanges?
+    private var value: Data?
+
+    func data(for ranges: ColorRanges, make: () -> Data) -> Data {
+        if let hit = lock.withLock({ key == ranges ? value : nil }) { return hit }
+        let made = make()
+        lock.withLock { key = ranges; value = made }
+        return made
     }
 }

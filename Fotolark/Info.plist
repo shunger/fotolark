@@ -21,6 +21,7 @@
 				<string>com.compuserve.gif</string>
 				<string>org.webmproject.webp</string>
 				<string>com.microsoft.bmp</string>
+				<string>public.camera-raw-image</string>
 			</array>
 		</dict>
 		<dict>
