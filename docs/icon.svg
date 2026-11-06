@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2E6FD8"/><stop offset="1" stop-color="#1B3F8F"/></linearGradient>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFC56B"/><stop offset="1" stop-color="#FF7A45"/></linearGradient>
+<linearGradient id="hill1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3FA36B"/><stop offset="1" stop-color="#2C7A50"/></linearGradient>
+<filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000" flood-opacity="0.35"/></filter>
+<clipPath id="photo"><rect x="262" y="262" width="500" height="430" rx="18"/></clipPath>
+</defs>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+<g transform="rotate(-6 512 512)" filter="url(#sh)">
+  <rect x="232" y="232" width="560" height="560" rx="34" fill="#FFFFFF"/>
+  <g clip-path="url(#photo)">
+    <rect x="262" y="262" width="500" height="430" fill="url(#sky)"/>
+    <circle cx="610" cy="420" r="70" fill="#FFF3C4"/>
+    <path d="M262 600 C 360 520, 450 520, 540 590 C 610 640, 690 600, 762 560 L762 692 L262 692 Z" fill="url(#hill1)"/>
+    <path d="M262 650 C 380 600, 520 620, 762 660 L762 692 L262 692 Z" fill="#23603F"/>
+    <path d="M390 380 q 22 -20 44 0 q 22 -20 44 0" fill="none" stroke="#5A3A2A" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</g>
+</svg>

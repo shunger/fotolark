@@ -1,0 +1,87 @@
+import FotolarkKit
+import SwiftUI
+
+struct FotolarkCommands: Commands {
+    let model: AppModel
+    @AppStorage("showInspector") private var showInspector = true
+    @AppStorage("neutralGrayBackground") private var neutralGray = false
+
+    private var editor: PhotoEditor? { model.editor }
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Open…") { model.showOpenPanel() }
+                .keyboardShortcut("o")
+        }
+
+        CommandGroup(replacing: .saveItem) {
+            Button("Export…") { model.sheet = .export }
+                .keyboardShortcut("e")
+                .disabled(editor == nil)
+            Button("Save Over Original…") { model.isConfirmingOverwrite = true }
+                .disabled(!canSaveOver)
+            Divider()
+            Button("Revert to Original") { editor?.revertToOriginal() }
+                .disabled(!(editor?.isEdited ?? false))
+            Button("Show Backups in Finder") { model.showBackupsInFinder() }
+        }
+
+        CommandGroup(replacing: .undoRedo) {
+            Button(editor?.history.undoLabel.map { "Undo \($0)" } ?? "Undo") { editor?.undo() }
+                .keyboardShortcut("z")
+                .disabled(!(editor?.history.canUndo ?? false))
+            Button(editor?.history.redoLabel.map { "Redo \($0)" } ?? "Redo") { editor?.redo() }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(!(editor?.history.canRedo ?? false))
+        }
+
+        CommandMenu("Photo") {
+            Group {
+                Button("Magic Fix") { editor?.toggleAutoFix(.magicFix) }
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
+                Button("Auto Contrast") { editor?.toggleAutoFix(.autoContrast) }
+                Button("Auto Color") { editor?.toggleAutoFix(.autoColor) }
+                Divider()
+                Button("Crop…") { editor?.beginCrop(); model.zoomToFit() }
+                    .keyboardShortcut("c", modifiers: [.command, .option])
+                Button("Straighten…") { editor?.tool = .straighten; model.zoomToFit() }
+                    .keyboardShortcut("t", modifiers: [.command, .option])
+                Button("Rotate Left") { editor?.rotate(clockwise: false) }
+                    .keyboardShortcut("[")
+                Button("Rotate Right") { editor?.rotate(clockwise: true) }
+                    .keyboardShortcut("]")
+                Button("Flip Horizontal") { editor?.flip(horizontally: true) }
+                Button("Flip Vertical") { editor?.flip(horizontally: false) }
+                Button("Resize…") { model.sheet = .resize }
+                    .keyboardShortcut("r", modifiers: [.command, .option])
+                Divider()
+                Button("Previous Photo") { model.previous() }
+                    .disabled(!model.canGoPrevious)
+                Button("Next Photo") { model.next() }
+                    .disabled(!model.canGoNext)
+            }
+            .disabled(editor == nil)
+        }
+
+        CommandGroup(before: .toolbar) {
+            Button("Zoom In") { model.zoomIn() }
+                .keyboardShortcut("=")
+            Button("Zoom Out") { model.zoomOut() }
+                .keyboardShortcut("-")
+            Button("Zoom to Fit") { model.zoomToFit() }
+                .keyboardShortcut("0")
+            Button("Actual Size") { model.zoomToActualSize() }
+                .keyboardShortcut("1")
+            Divider()
+            Toggle("Neutral Gray Background", isOn: $neutralGray)
+            Toggle("Show Editing Panel", isOn: $showInspector)
+                .keyboardShortcut("i", modifiers: [.command, .option])
+            Divider()
+        }
+    }
+
+    private var canSaveOver: Bool {
+        guard let editor, editor.isEdited else { return false }
+        return OriginalOverwriter.format(for: editor.info) != nil
+    }
+}

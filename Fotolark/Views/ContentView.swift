@@ -1,0 +1,149 @@
+import FotolarkKit
+import SwiftUI
+import UniformTypeIdentifiers
+
+struct ContentView: View {
+    @Bindable var model: AppModel
+    @AppStorage("showInspector") private var showInspector = true
+    @State private var isDropTargeted = false
+
+    var body: some View {
+        Group {
+            if let editor = model.editor {
+                HStack(spacing: 0) {
+                    CanvasView(editor: editor, model: model)
+                    if showInspector {
+                        Divider()
+                        InspectorView(editor: editor, model: model)
+                            .frame(width: 290)
+                    }
+                }
+                .toolbar { EditorToolbar(editor: editor, model: model, showInspector: $showInspector) }
+                .sheet(item: $model.sheet) { sheet in
+                    switch sheet {
+                    case .export: ExportSheet(editor: editor, model: model)
+                    case .resize: ResizeSheet(editor: editor)
+                    }
+                }
+                .alert("Save over the original?", isPresented: $model.isConfirmingOverwrite) {
+                    Button("Save Over Original", role: .destructive) { model.saveOverOriginal() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("“\(editor.url.lastPathComponent)” will be replaced with the edited version. A backup of the original is kept and can be found with File › Show Backups in Finder.")
+                }
+            } else {
+                EmptyStateView(model: model, isDropTargeted: isDropTargeted)
+                    .toolbar {
+                        ToolbarItem {
+                            Button("Open", systemImage: "folder") { model.showOpenPanel() }
+                        }
+                    }
+            }
+        }
+        .navigationTitle(model.editor?.url.lastPathComponent ?? "Fotolark")
+        .navigationSubtitle(subtitle)
+        .dropDestination(for: URL.self) { urls, _ in
+            model.open(urls)
+            return true
+        } isTargeted: { isDropTargeted = $0 }
+        .alert("Something went wrong", isPresented: Binding(
+            get: { model.errorMessage != nil },
+            set: { if !$0 { model.errorMessage = nil } }
+        )) {
+            Button("OK") { model.errorMessage = nil }
+        } message: {
+            Text(model.errorMessage ?? "")
+        }
+    }
+
+    private var subtitle: String {
+        guard let editor = model.editor, let i = model.index else { return "" }
+        let position = model.photos.count > 1 ? "\(i + 1) of \(model.photos.count) · " : ""
+        return position + "\(editor.editedSize) px"
+    }
+}
+
+struct EditorToolbar: ToolbarContent {
+    @Bindable var editor: PhotoEditor
+    @Bindable var model: AppModel
+    @Binding var showInspector: Bool
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigation) {
+            Button("Previous", systemImage: "chevron.left") { model.previous() }
+                .disabled(!model.canGoPrevious)
+                .help("Previous photo (←)")
+            Button("Next", systemImage: "chevron.right") { model.next() }
+                .disabled(!model.canGoNext)
+                .help("Next photo (→)")
+        }
+        ToolbarItemGroup {
+            Button("Open", systemImage: "folder") { model.showOpenPanel() }
+                .help("Open photos or a folder (⌘O)")
+            Button("Rotate Left", systemImage: "rotate.left") { editor.rotate(clockwise: false) }
+                .help("Rotate left (⌘[)")
+            Button("Rotate Right", systemImage: "rotate.right") { editor.rotate(clockwise: true) }
+                .help("Rotate right (⌘])")
+            CompareButton(editor: editor)
+            Button("Undo", systemImage: "arrow.uturn.backward") { editor.undo() }
+                .disabled(!editor.history.canUndo)
+                .help("Undo (⌘Z)")
+            Button("Redo", systemImage: "arrow.uturn.forward") { editor.redo() }
+                .disabled(!editor.history.canRedo)
+                .help("Redo (⇧⌘Z)")
+            Button("Export", systemImage: "square.and.arrow.up") { model.sheet = .export }
+                .help("Export an edited copy (⌘E)")
+            Button("Inspector", systemImage: "sidebar.right") { showInspector.toggle() }
+                .help("Show or hide the editing panel (⌥⌘I)")
+        }
+    }
+}
+
+/// Press and hold to see the original photo.
+struct CompareButton: View {
+    @Bindable var editor: PhotoEditor
+
+    var body: some View {
+        Image(systemName: editor.showOriginal ? "eye.fill" : "eye")
+            .frame(width: 28, height: 22)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in editor.showOriginal = true }
+                    .onEnded { _ in editor.showOriginal = false }
+            )
+            .help("Hold to see the original (or hold the \\ key)")
+            .accessibilityLabel("Show original")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { editor.showOriginal.toggle() }
+    }
+}
+
+struct EmptyStateView: View {
+    @Bindable var model: AppModel
+    let isDropTargeted: Bool
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 56, weight: .light))
+                .foregroundStyle(.secondary)
+            Text("Drop photos or a folder here")
+                .font(.title2.weight(.semibold))
+            Text("Fotolark edits photos where they are. Your originals are never changed unless you choose Save Over Original.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 380)
+            Button("Open Photos…") { model.showOpenPanel() }
+                .controlSize(.large)
+        }
+        .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                .foregroundStyle(isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.35))
+                .padding(24)
+        }
+    }
+}

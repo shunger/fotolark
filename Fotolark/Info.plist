@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Photo</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.jpeg</string>
+				<string>public.png</string>
+				<string>public.heic</string>
+				<string>public.heif</string>
+				<string>public.tiff</string>
+				<string>com.compuserve.gif</string>
+				<string>org.webmproject.webp</string>
+				<string>com.microsoft.bmp</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- Sidecar edit files. NSIsRelatedItemType lets the sandboxed app write
+			     IMG_0001.fotolark next to IMG_0001.jpg when only the photo was opened. -->
+			<key>CFBundleTypeName</key>
+			<string>Fotolark Edits</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.purehungerlabs.fotolark.edits</string>
+			</array>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>fotolark</string>
+			</array>
+			<key>NSIsRelatedItemType</key>
+			<true/>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.purehungerlabs.fotolark.edits</string>
+			<key>UTTypeDescription</key>
+			<string>Fotolark Edits</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>fotolark</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

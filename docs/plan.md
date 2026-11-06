@@ -278,6 +278,6 @@ The hardest parts are the interactive tools (crop handles, brushes, healing) and
 - [ ] Search "Fotolark" on the [USPTO trademark search](https://tmsearch.uspto.gov) in class 9 (software)
 - [x] Confirm Xcode is installed and opens (Xcode 27.2 installed)
 - [x] Decide how edits are stored (sidecar files)
-- [ ] Claude creates the Fotolark Xcode project and the Phase 1 editor in `~/dev/Fotolark`
+- [x] Claude creates the Fotolark Xcode project and the Phase 1 editor in `~/dev/Fotolark`
 - [ ] Run it, edit 20 of your own photos, and note what feels wrong
 - [ ] Adjust this plan, then start Phase 2

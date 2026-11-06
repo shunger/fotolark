@@ -6,7 +6,18 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
 
 ## Status
 
-Planning complete; development not started. Next: Phase 1 (core editor).
+Phase 1 (core editor) in progress: the editor works end to end and is ready for the
+"edit 20 of your own photos" gate.
+
+## Build and test
+
+- Open `Fotolark.xcodeproj` in Xcode and run the **Fotolark** scheme, or
+  `xcodebuild -project Fotolark.xcodeproj -scheme Fotolark build`.
+- Engine tests: `cd FotolarkKit && swift test`.
+- Check the engine still builds for iPad/iPhone:
+  `cd FotolarkKit && xcodebuild -scheme FotolarkKit -destination 'generic/platform=iOS' build`.
+
+The app is sandboxed and signed to run locally (no Apple Developer account needed yet).
 
 ## Docs
 
@@ -15,12 +26,11 @@ Planning complete; development not started. Next: Phase 1 (core editor).
 - [docs/naming-and-legal.md](docs/naming-and-legal.md) — name screening and rules for staying clear of Picasa/Google trademarks
 - Live, editable plan (Claude Doc): https://claude.ai/artifact/C4sZy2hHauiyKFhUyMas6H
 
-## Planned layout
+## Layout
 
 ```
 Fotolark/
 ├── docs/              plans and research
-├── FotolarkKit/       shared Swift package: edit recipes, Core Image filters, file I/O, bulk jobs
-├── Fotolark/          macOS app (SwiftUI)
-└── FotolarkTests/
+├── FotolarkKit/       shared Swift package: edit recipes, Core Image filters, file I/O (+ its tests)
+└── Fotolark/          macOS app (SwiftUI)
 ```
