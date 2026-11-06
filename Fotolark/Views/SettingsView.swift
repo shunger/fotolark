@@ -38,6 +38,12 @@ private struct GeneralSettings: View {
 
             Toggle("Neutral gray background while editing", isOn: $neutralGray)
 
+            Toggle("Also save tags inside the photo files", isOn: $model.writesTagsToFiles)
+            Text("Other photo apps can then see your tags. This rewrites the details stored in each file, never the picture, and keeps a backup. Ratings and flags stay with Fotolark’s edits.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             Section("Your edit presets") {
                 if model.editPresets.isEmpty {
                     Text("Save one from the Effects section while editing.").foregroundStyle(.secondary)

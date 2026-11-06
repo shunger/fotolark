@@ -15,6 +15,8 @@ final class AppModel {
         case opened
         /// Importing from a phone, camera, card or folder (key from `importKey`).
         case importing(String)
+        /// An album's photos, from any folders.
+        case album(Album.ID)
     }
 
     var source: Source? {
@@ -27,6 +29,8 @@ final class AppModel {
     var selection: Set<URL> = []
     /// Edits of the photos on screen, for thumbnails.
     private(set) var recipes: [URL: EditRecipe] = [:]
+    /// Ratings, flags and tags of the photos on screen.
+    private(set) var labels: [URL: PhotoLabels] = [:]
     private(set) var isLoadingPhotos = false
     private(set) var editor: PhotoEditor?
     var errorMessage: String?
@@ -51,6 +55,9 @@ final class AppModel {
     let jobs = JobQueue()
     let devices = DeviceBrowser()
     let importHistory: ImportHistory
+    let albumStore: AlbumStore
+    /// The albums, kept in step with `albumStore` for the sidebar.
+    private(set) var albums: [Album] = []
     private(set) var folderImports: [FolderImportSource] = []
     let promises: EditedPhotoPromise
     let backupDirectory: URL
@@ -71,6 +78,8 @@ final class AppModel {
         library = FolderLibrary(supportDirectory: support)
         dates = DateTakenCache(fileURL: caches.appendingPathComponent("DatesTaken.json"))
         importHistory = ImportHistory(fileURL: support.appendingPathComponent("ImportHistory.json"))
+        albumStore = AlbumStore(fileURL: support.appendingPathComponent("Albums.json"))
+        albums = albumStore.albums
         sortOrder = PhotoSortOrder(rawValue: UserDefaults.standard.string(forKey: "sortOrder") ?? "") ?? .dateTaken
         let size = UserDefaults.standard.double(forKey: "thumbnailSize")
         thumbnailSize = size > 0 ? size : 160
@@ -149,18 +158,22 @@ final class AppModel {
         isLoadingPhotos = true
         let opened = openedPhotos
         let store = store
+        let albumStore = albumStore
         Task {
-            let (found, recipes) = await Task.detached(priority: .userInitiated) { () -> ([ScannedPhoto], [URL: EditRecipe]) in
+            let (found, records) = await Task.detached(priority: .userInitiated) { () -> ([ScannedPhoto], [URL: PhotoRecord]) in
                 let found: [ScannedPhoto]
                 switch source {
                 case .folder(let url): found = PhotoScanner.photos(in: url)
                 case .opened: found = opened.compactMap(Self.scan)
+                case .album(let id): found = albumStore.photos(in: id).compactMap(Self.scan)
                 case .importing: found = []
                 }
-                return (found, store.recipes(for: found.map(\.url)))
+                return (found, store.records(for: found.map(\.url)))
             }.value
             guard generation == loadGeneration else { return }
-            self.recipes = recipes
+            self.recipes = records.compactMapValues { $0.recipe.isEmpty ? nil : $0.recipe }
+            self.labels = records.compactMapValues { $0.labels.isEmpty ? nil : $0.labels }
+            if case .album = source { albums = albumStore.albums }
             photos = sortOrder.sorted(found, dates: dates.dates(for: found))
             selection = selection.intersection(found.map(\.url))
             isLoadingPhotos = false
@@ -194,6 +207,10 @@ final class AppModel {
     }
 
     private func foldersChanged(_ changed: Set<URL>) {
+        if case .album = source {
+            reloadPhotos()
+            return
+        }
         guard case .folder(let current) = source else { return }
         let path = current.standardizedFileURL.path
         guard changed.contains(where: { $0.path == path || path.hasPrefix($0.path + "/") || $0.path.hasPrefix(path) }) else {
@@ -262,6 +279,9 @@ final class AppModel {
     enum Sheet: Identifiable {
         case export, resize, rename
         case bulk(BulkTool)
+        /// Name a new album; the photos go into it.
+        case newAlbum([URL])
+        case renameAlbum(Album.ID)
 
         var id: String {
             switch self {
@@ -269,6 +289,8 @@ final class AppModel {
             case .resize: "resize"
             case .rename: "rename"
             case .bulk: "bulk"
+            case .newAlbum: "newAlbum"
+            case .renameAlbum: "renameAlbum"
             }
         }
     }
@@ -566,9 +588,10 @@ final class AppModel {
         }
     }
 
-    func bulkEditDetails(_ photos: [URL], changes: MetadataChanges) {
+    func bulkEditDetails(_ photos: [URL], changes: MetadataChanges, title: String = "Update details of") {
         let backups = backupDirectory
-        jobs.run("Update details of \(photos.count) photos", items: photos, maxConcurrent: 2,
+        jobs.run("\(title) \(photos.count == 1 ? photos[0].lastPathComponent : "\(photos.count) photos")",
+                 items: photos, maxConcurrent: 2,
                  name: { $0.lastPathComponent }) { url in
             try MetadataEditor.apply(changes, to: url, backupDirectory: backups)
         }
@@ -593,6 +616,102 @@ final class AppModel {
                  maxConcurrent: 1, name: { $0.lastPathComponent }) { url in
             try BulkTools.transfer(url, copy: copy, to: folder, dateFolders: dateFolders, dateTaken: dates[url], store: store)
         }
+    }
+
+    // MARK: Ratings, flags and tags
+
+    /// Also write tag changes into the photo files (XMP keywords) for other apps.
+    var writesTagsToFiles = UserDefaults.standard.bool(forKey: "writeTagsToFiles") {
+        didSet { UserDefaults.standard.set(writesTagsToFiles, forKey: "writeTagsToFiles") }
+    }
+
+    /// Tags used before, offered while typing.
+    private(set) var knownTags: [String] = UserDefaults.standard.stringArray(forKey: "knownTags") ?? []
+
+    func labels(for url: URL) -> PhotoLabels { labels[url] ?? PhotoLabels() }
+
+    private let labelQueue = DispatchQueue(label: "Fotolark labels", qos: .userInitiated)
+
+    /// Rates, flags or tags photos (the one being edited, or the grid selection).
+    func applyLabel(_ change: LabelChange, to urls: [URL]? = nil) {
+        let targets = urls ?? targetPhotos
+        guard !targets.isEmpty else { return }
+        var changedTargets: [URL] = []
+        for url in targets {
+            var l = labels(for: url)
+            let before = l
+            change.apply(to: &l)
+            guard l != before else { continue }
+            labels[url] = l.isEmpty ? nil : l
+            changedTargets.append(url)
+        }
+        guard !changedTargets.isEmpty else { return }
+        if case .addTag(let tag) = change { remember(tag) }
+        let store = store
+        let snapshot = changedTargets.map { ($0, labels(for: $0)) }
+        // One at a time, in order, so quick key presses can't land out of order.
+        labelQueue.async { [weak self] in
+            var failed = 0
+            for (url, l) in snapshot where (try? store.update(url, change: { $0.labels = l })) == nil { failed += 1 }
+            if failed > 0 {
+                Task { @MainActor in self?.errorMessage = "Couldn’t save the change for \(failed) of the photos." }
+            }
+        }
+        if writesTagsToFiles {
+            var changes = MetadataChanges()
+            switch change {
+            case .addTag(let t): changes.addKeywords = [t]
+            case .removeTag(let t): changes.removeKeywords = [t]
+            default: return
+            }
+            bulkEditDetails(changedTargets, changes: changes, title: "Save tags into")
+        }
+    }
+
+    private func remember(_ tag: String) {
+        let t = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, !knownTags.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) else { return }
+        knownTags.append(t)
+        knownTags.sort { $0.localizedStandardCompare($1) == .orderedAscending }
+        UserDefaults.standard.set(knownTags, forKey: "knownTags")
+    }
+
+    // MARK: Albums
+
+    var currentAlbum: Album? {
+        guard case .album(let id) = source else { return nil }
+        return albums.first { $0.id == id }
+    }
+
+    func createAlbum(named name: String, with photos: [URL]) {
+        let album = albumStore.create(named: name, with: photos)
+        albums = albumStore.albums
+        if photos.isEmpty { closeEditor(); source = .album(album.id) }
+    }
+
+    func addToAlbum(_ id: Album.ID, photos: [URL]? = nil) {
+        albumStore.add(photos ?? targetPhotos, to: id)
+        albums = albumStore.albums
+    }
+
+    func removeFromCurrentAlbum() {
+        guard let album = currentAlbum else { return }
+        let targets = targetPhotos
+        closeEditor()
+        albumStore.remove(targets, from: album.id)
+        albums = albumStore.albums
+        reloadPhotos()
+    }
+
+    func renameAlbum(_ id: Album.ID, to name: String) {
+        albumStore.rename(id, to: name)
+        albums = albumStore.albums
+    }
+
+    func deleteAlbum(_ id: Album.ID) {
+        albumStore.delete(id)
+        albums = albumStore.albums
+        if case .album(id) = source { source = nil }
     }
 
     // MARK: Compare
@@ -800,4 +919,18 @@ extension AppModel.Source {
 
 extension ImportSource {
     var importKey: String { AppModel.importKey(self) }
+}
+
+extension LabelChange {
+    /// The key that makes this change in the grid or editor: 0–5 rate, P picks,
+    /// X rejects, U clears the flag.
+    init?(key: String) {
+        switch key.lowercased() {
+        case "0", "1", "2", "3", "4", "5": self = .rating(Int(key)!)
+        case "p": self = .flag(.pick)
+        case "x": self = .flag(.reject)
+        case "u": self = .flag(.none)
+        default: return nil
+        }
+    }
 }

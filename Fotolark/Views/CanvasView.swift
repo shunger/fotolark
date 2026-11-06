@@ -67,6 +67,13 @@ struct CanvasView: View {
             if editor.tool == .crop { editor.cancelCrop() } else { editor.tool = .none }
             return .handled
         }
+        // 0–5 rate, P picks, X rejects, U clears the flag.
+        .onKeyPress(characters: CharacterSet(charactersIn: "012345pxuPXU")) { press in
+            guard editor.tool == .none, press.modifiers.isDisjoint(with: [.command, .control, .option]),
+                  let change = LabelChange(key: press.characters) else { return .ignored }
+            model.applyLabel(change, to: [editor.url])
+            return .handled
+        }
         // Hold the backslash key to see the original.
         .onKeyPress(characters: ["\\"], phases: [.down, .up]) { press in
             editor.showOriginal = press.phase == .down

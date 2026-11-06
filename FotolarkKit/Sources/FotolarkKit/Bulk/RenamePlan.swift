@@ -146,12 +146,14 @@ public enum RenamePlan {
         for item in items where item.problem != nil {
             result.skipped.append(SkippedItem(name: item.source.lastPathComponent, reason: item.problem!))
         }
-        // Lift every recipe off first, so moving them can't overwrite one another.
-        var recipes: [URL: EditRecipe] = [:]
+        // Lift every record (edits, rating, tags) off first, so moving them can't
+        // overwrite one another.
+        var recipes: [URL: PhotoRecord] = [:]
         for item in todo {
-            if let r = store.load(for: item.source) {
+            let r = store.loadRecord(for: item.source)
+            if !r.isEmpty {
                 recipes[item.source] = r
-                _ = try? store.save(EditRecipe(), for: item.source)
+                _ = try? store.saveRecord(PhotoRecord(), for: item.source)
             }
         }
         var staged: [(item: RenamePreviewItem, temp: URL)] = []
@@ -163,19 +165,19 @@ public enum RenamePlan {
                 staged.append((item, temp))
             } catch {
                 result.skipped.append(SkippedItem(name: item.source.lastPathComponent, reason: error.localizedDescription))
-                if let r = recipes[item.source] { _ = try? store.save(r, for: item.source) }
+                if let r = recipes[item.source] { _ = try? store.saveRecord(r, for: item.source) }
             }
         }
         for (item, temp) in staged {
             let target = item.source.deletingLastPathComponent().appendingPathComponent(item.newName)
             do {
                 try FileManager.default.moveItem(at: temp, to: target)
-                if let r = recipes[item.source] { _ = try? store.save(r, for: target) }
+                if let r = recipes[item.source] { _ = try? store.saveRecord(r, for: target) }
                 result.undo.append(.moveBack(current: target, original: item.source))
             } catch {
                 // Put it back under its old name.
                 try? FileManager.default.moveItem(at: temp, to: item.source)
-                if let r = recipes[item.source] { _ = try? store.save(r, for: item.source) }
+                if let r = recipes[item.source] { _ = try? store.saveRecord(r, for: item.source) }
                 result.skipped.append(SkippedItem(name: item.source.lastPathComponent, reason: error.localizedDescription))
             }
             result.completed += 1

@@ -45,6 +45,28 @@ struct SidebarView: View {
                 }
             }
 
+            Section {
+                ForEach(model.albums) { album in
+                    Label(album.name, systemImage: "rectangle.stack")
+                        .badge(album.items.count)
+                        .tag(AppModel.Source.album(album.id))
+                        .contextMenu {
+                            Button("Rename…") { model.sheet = .renameAlbum(album.id) }
+                            Button("Delete Album") { model.deleteAlbum(album.id) }
+                        }
+                        .help("\(album.name): photos from any folder. Deleting the album leaves the photos alone.")
+                }
+                Button {
+                    model.sheet = .newAlbum([])
+                } label: {
+                    Label("New Album…", systemImage: "plus.rectangle.on.rectangle")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            } header: {
+                Text("Albums")
+            }
+
             ForEach(library.roots) { root in
                 Section {
                     if let folders = library.folders[root.id] {

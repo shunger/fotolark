@@ -129,13 +129,14 @@ public enum BulkRunner {
             }
         }
 
-        var staged: [(temp: URL, original: URL, current: URL, recipe: EditRecipe?)] = []
+        var staged: [(temp: URL, original: URL, current: URL, recipe: PhotoRecord?)] = []
         for case let .moveBack(current, original) in steps.reversed() {
             let temp = current.deletingLastPathComponent().appendingPathComponent(".fotolark-undo-\(UUID().uuidString)")
             do {
-                let recipe = store.load(for: current)
+                let record = store.loadRecord(for: current)
+                let recipe = record.isEmpty ? nil : record
                 try FileManager.default.moveItem(at: current, to: temp)
-                if recipe != nil { _ = try? store.save(EditRecipe(), for: current) }
+                if recipe != nil { _ = try? store.saveRecord(PhotoRecord(), for: current) }
                 staged.append((temp, original, current, recipe))
             } catch { fail(current, error) }
         }
@@ -147,11 +148,11 @@ public enum BulkRunner {
                 try FileManager.default.createDirectory(at: item.original.deletingLastPathComponent(),
                                                         withIntermediateDirectories: true)
                 try FileManager.default.moveItem(at: item.temp, to: item.original)
-                if let r = item.recipe { _ = try? store.save(r, for: item.original) }
+                if let r = item.recipe { _ = try? store.saveRecord(r, for: item.original) }
             } catch {
                 // Leave it where the job had put it.
                 try? FileManager.default.moveItem(at: item.temp, to: item.current)
-                if let r = item.recipe { _ = try? store.save(r, for: item.current) }
+                if let r = item.recipe { _ = try? store.saveRecord(r, for: item.current) }
                 fail(item.current, error)
             }
         }

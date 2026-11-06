@@ -78,18 +78,26 @@ struct BrowserView: View {
                     ProgressView()
                 } else {
                     Image(systemName: "photo").font(.system(size: 40, weight: .light)).foregroundStyle(.secondary)
-                    Text("No photos in this folder").font(.title3)
-                    Text("Photos in subfolders are listed under this folder in the sidebar.")
-                        .foregroundStyle(.secondary)
+                    if model.currentAlbum != nil {
+                        Text("No photos in this album").font(.title3)
+                        Text("Select photos in a folder, then right-click and choose Add to Album.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("No photos in this folder").font(.title3)
+                        Text("Photos in subfolders are listed under this folder in the sidebar.")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            PhotoGridView(photos: model.photos, recipes: model.recipes, selection: $model.selection,
+            PhotoGridView(photos: model.photos, recipes: model.recipes, labels: model.labels,
+                          selection: $model.selection,
                           thumbnailSize: model.thumbnailSize, thumbnails: model.thumbnails,
                           promises: model.promises,
                           onOpen: { model.openEditor($0) },
-                          makeMenu: { FileMenu.make(model: model) })
+                          makeMenu: { FileMenu.make(model: model) },
+                          onLabel: { model.applyLabel($0) })
         }
     }
 
@@ -111,6 +119,14 @@ enum FileMenu {
         menu.addItem(ActionItem(count == 1 ? "Paste Edits" : "Paste Edits onto \(count) Photos",
                                 enabled: model.canPasteEdits) { model.pasteEdits() })
         menu.addItem(.separator())
+        menu.addItem(ratingMenu(model: model))
+        menu.addItem(albumMenu(model: model))
+        if model.currentAlbum != nil {
+            menu.addItem(ActionItem(count == 1 ? "Remove from Album" : "Remove \(count) Photos from Album") {
+                model.removeFromCurrentAlbum()
+            })
+        }
+        menu.addItem(.separator())
         menu.addItem(ActionItem("Show in Finder") { model.revealInFinder() })
         menu.addItem(ActionItem("Rename…", enabled: count == 1) { model.sheet = .rename })
         let bulk = NSMenuItem(title: "Bulk", action: nil, keyEquivalent: "")
@@ -124,6 +140,43 @@ enum FileMenu {
         menu.addItem(.separator())
         menu.addItem(ActionItem(count == 1 ? "Move to Trash" : "Move \(count) Photos to Trash") { model.moveTargetsToTrash() })
         return menu
+    }
+
+    static func ratingMenu(model: AppModel) -> NSMenuItem {
+        let item = NSMenuItem(title: "Rating and Flag", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for r in 0...5 {
+            let title = r == 0 ? "No Stars" : String(repeating: "★", count: r)
+            let entry = ActionItem(title) { model.applyLabel(.rating(r)) }
+            entry.keyEquivalent = "\(r)"
+            entry.keyEquivalentModifierMask = []
+            sub.addItem(entry)
+        }
+        sub.addItem(.separator())
+        for (title, flag, key) in [("Pick", PhotoLabels.Flag.pick, "p"), ("Reject", .reject, "x"), ("Clear Flag", .none, "u")] {
+            let entry = ActionItem(title) { model.applyLabel(.flag(flag)) }
+            entry.keyEquivalent = key
+            entry.keyEquivalentModifierMask = []
+            sub.addItem(entry)
+        }
+        item.submenu = sub
+        return item
+    }
+
+    static func albumMenu(model: AppModel) -> NSMenuItem {
+        let item = NSMenuItem(title: "Add to Album", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        let targets = model.targetPhotos
+        for album in model.albums where album.id != model.currentAlbum?.id {
+            let inAll = targets.allSatisfy { album.contains($0) }
+            let entry = ActionItem(album.name, enabled: !inAll) { model.addToAlbum(album.id, photos: targets) }
+            if inAll { entry.state = .on }
+            sub.addItem(entry)
+        }
+        if !model.albums.isEmpty { sub.addItem(.separator()) }
+        sub.addItem(ActionItem("New Album…") { model.sheet = .newAlbum(targets) })
+        item.submenu = sub
+        return item
     }
 }
 
@@ -230,6 +283,10 @@ struct InfoPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Info").font(.headline).accessibilityAddTraits(.isHeader)
+                if !labelTargets.isEmpty {
+                    LabelsEditor(model: model, urls: labelTargets)
+                    Divider()
+                }
                 if let url {
                     Text(url.lastPathComponent)
                         .font(.body.weight(.semibold))
@@ -247,6 +304,8 @@ struct InfoPanel: View {
                             row("Format", m.typeIdentifier.flatMap { UTType($0)?.localizedDescription })
                             row("Location", m.coordinatesText)
                             row("Altitude", m.altitude.map { "\(Int($0.rounded())) m" })
+                            row("Keywords", m.keywords.isEmpty ? nil : m.keywords.joined(separator: ", "))
+                            row("Albums", albumNames(url))
                             row("Folder", url.deletingLastPathComponent().path)
                         }
                         .font(.callout)
@@ -273,6 +332,17 @@ struct InfoPanel: View {
             metadata = m
             fileSize = size
         }
+    }
+
+    /// The photo shown, or every selected photo.
+    private var labelTargets: [URL] {
+        if let url { return [url] }
+        return model.selection.count > 1 ? model.targetPhotos : []
+    }
+
+    private func albumNames(_ url: URL) -> String? {
+        let names = model.albums.filter { $0.contains(url) }.map(\.name)
+        return names.isEmpty ? nil : names.joined(separator: ", ")
     }
 
     @ViewBuilder

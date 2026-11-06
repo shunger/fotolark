@@ -19,6 +19,8 @@ public struct PhotoMetadata: Equatable, Sendable {
     /// Meters above sea level.
     public var altitude: Double?
     public var typeIdentifier: String?
+    /// Keywords stored in the file by other apps (IPTC or XMP).
+    public var keywords: [String] = []
 
     public init() {}
 
@@ -58,7 +60,22 @@ public struct PhotoMetadata: Equatable, Sendable {
         if let alt = gps[kCGImagePropertyGPSAltitude] as? Double {
             m.altitude = (gps[kCGImagePropertyGPSAltitudeRef] as? Int) == 1 ? -alt : alt
         }
+        m.keywords = keywords(in: src)
         return m
+    }
+
+    /// Keywords in the file: the IPTC list, or else XMP dc:subject.
+    static func keywords(in src: CGImageSource) -> [String] {
+        let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] ?? [:]
+        if let iptc = (props[kCGImagePropertyIPTCDictionary] as? [CFString: Any])?[kCGImagePropertyIPTCKeywords] {
+            if let list = iptc as? [String], !list.isEmpty { return list }
+            if let one = iptc as? String, !one.isEmpty { return [one] }
+        }
+        guard let meta = CGImageSourceCopyMetadataAtIndex(src, 0, nil),
+              let tag = CGImageMetadataCopyTagWithPath(meta, nil, "dc:subject" as CFString),
+              let values = CGImageMetadataTagCopyValue(tag) as? [CGImageMetadataTag]
+        else { return [] }
+        return values.compactMap { CGImageMetadataTagCopyValue($0) as? String }
     }
 
     /// Just the capture date, for sorting.

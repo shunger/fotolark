@@ -19,6 +19,13 @@ struct ShortcutsView: View {
             ("⇧⌘R", "Show in Finder"),
             ("⌘⌫", "Move to Trash"),
         ]),
+        Group(id: "Rating and flagging (grid or editor)", items: [
+            ("1 to 5", "Give the photo that many stars"),
+            ("0", "Clear the stars"),
+            ("P", "Mark as a pick"),
+            ("X", "Mark as rejected"),
+            ("U", "Clear the flag"),
+        ]),
         Group(id: "Editing", items: [
             ("← →", "Previous or next photo"),
             ("Esc", "Back to all photos (or leave a tool)"),

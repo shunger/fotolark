@@ -8,12 +8,15 @@ import SwiftUI
 struct PhotoGridView: NSViewRepresentable {
     let photos: [ScannedPhoto]
     let recipes: [URL: EditRecipe]
+    var labels: [URL: PhotoLabels] = [:]
     @Binding var selection: Set<URL>
     let thumbnailSize: CGFloat
     let thumbnails: ThumbnailStore
     let promises: EditedPhotoPromise
     let onOpen: (URL) -> Void
     let makeMenu: () -> NSMenu
+    /// Number keys rate, P picks, X rejects, U clears the flag.
+    var onLabel: (LabelChange) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -58,6 +61,7 @@ struct PhotoGridView: NSViewRepresentable {
         private var byURL: [URL: ScannedPhoto] = [:]
         private var shownURLs: [URL] = []
         private var shownRecipes: [URL: EditRecipe] = [:]
+        private var shownLabels: [URL: PhotoLabels] = [:]
         private var itemSize: CGFloat = 0
         private var isApplyingSelection = false
 
@@ -69,8 +73,8 @@ struct PhotoGridView: NSViewRepresentable {
                 [weak self] collectionView, indexPath, url in
                 let item = collectionView.makeItem(withIdentifier: PhotoGridItem.identifier, for: indexPath)
                 if let self, let cell = item as? PhotoGridItem, let photo = self.byURL[url] {
-                    cell.configure(photo: photo, recipe: self.parent.recipes[url], store: self.parent.thumbnails,
-                                   pointSize: self.itemSize)
+                    cell.configure(photo: photo, recipe: self.parent.recipes[url], labels: self.parent.labels[url],
+                                   store: self.parent.thumbnails, pointSize: self.itemSize)
                 }
                 return item
             }
@@ -96,12 +100,17 @@ struct PhotoGridView: NSViewRepresentable {
                 dataSource.apply(snapshot, animatingDifferences: false)
             }
 
-            // Thumbnails whose edits changed.
+            // Thumbnails whose edits, rating, flag or tags changed.
+            var changed: Set<URL> = []
             if parent.recipes != shownRecipes {
-                let changed = Set(parent.recipes.keys).union(shownRecipes.keys).filter { parent.recipes[$0] != shownRecipes[$0] }
+                changed.formUnion(Set(parent.recipes.keys).union(shownRecipes.keys).filter { parent.recipes[$0] != shownRecipes[$0] })
                 shownRecipes = parent.recipes
-                refreshVisible(only: changed)
             }
+            if parent.labels != shownLabels {
+                changed.formUnion(Set(parent.labels.keys).union(shownLabels.keys).filter { parent.labels[$0] != shownLabels[$0] })
+                shownLabels = parent.labels
+            }
+            if !changed.isEmpty { refreshVisible(only: changed) }
 
             applySelection(parent.selection)
         }
@@ -112,7 +121,8 @@ struct PhotoGridView: NSViewRepresentable {
                 guard let url = dataSource.itemIdentifier(for: indexPath), urls?.contains(url) ?? true,
                       let photo = byURL[url],
                       let cell = collection.item(at: indexPath) as? PhotoGridItem else { continue }
-                cell.configure(photo: photo, recipe: parent.recipes[url], store: parent.thumbnails, pointSize: itemSize)
+                cell.configure(photo: photo, recipe: parent.recipes[url], labels: parent.labels[url],
+                               store: parent.thumbnails, pointSize: itemSize)
             }
         }
 
@@ -179,6 +189,8 @@ struct PhotoGridView: NSViewRepresentable {
         }
 
         func menu() -> NSMenu { parent.makeMenu() }
+
+        func label(_ change: LabelChange) { parent.onLabel(change) }
     }
 }
 
@@ -198,6 +210,9 @@ final class GridCollectionView: NSCollectionView {
         // Return or Enter opens the selected photo.
         if event.keyCode == 36 || event.keyCode == 76 {
             coordinator?.open(at: nil)
+        } else if event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                  let chars = event.charactersIgnoringModifiers, let change = LabelChange(key: chars) {
+            coordinator?.label(change)
         } else {
             super.keyDown(with: event)
         }
@@ -223,6 +238,8 @@ final class PhotoGridItem: NSCollectionViewItem {
     private let thumb = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private let badge = NSImageView()
+    private let stars = NSTextField(labelWithString: "")
+    private let flag = NSImageView()
     private let selectionLayer = CALayer()
     private var loadTask: Task<Void, Never>?
     private var currentURL: URL?
@@ -256,9 +273,25 @@ final class PhotoGridItem: NSCollectionViewItem {
         badge.translatesAutoresizingMaskIntoConstraints = false
         badge.toolTip = "Edited"
 
+        stars.font = .systemFont(ofSize: 11, weight: .semibold)
+        stars.textColor = .white
+        stars.wantsLayer = true
+        stars.drawsBackground = false
+        stars.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
+        stars.layer?.cornerRadius = 4
+        stars.translatesAutoresizingMaskIntoConstraints = false
+
+        flag.wantsLayer = true
+        flag.layer?.cornerRadius = 9
+        flag.imageScaling = .scaleProportionallyDown
+        flag.contentTintColor = .white
+        flag.translatesAutoresizingMaskIntoConstraints = false
+
         root.addSubview(thumb)
         root.addSubview(label)
         root.addSubview(badge)
+        root.addSubview(stars)
+        root.addSubview(flag)
         NSLayoutConstraint.activate([
             thumb.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 6),
             thumb.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -6),
@@ -272,6 +305,12 @@ final class PhotoGridItem: NSCollectionViewItem {
             badge.heightAnchor.constraint(equalToConstant: 18),
             badge.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
             badge.bottomAnchor.constraint(equalTo: label.topAnchor, constant: -6),
+            stars.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
+            stars.bottomAnchor.constraint(equalTo: label.topAnchor, constant: -6),
+            flag.widthAnchor.constraint(equalToConstant: 18),
+            flag.heightAnchor.constraint(equalToConstant: 18),
+            flag.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
+            flag.topAnchor.constraint(equalTo: root.topAnchor, constant: 8),
         ])
         view = root
     }
@@ -296,12 +335,36 @@ final class PhotoGridItem: NSCollectionViewItem {
         view.setAccessibilitySelected(on)
     }
 
-    func configure(photo: ScannedPhoto, recipe: EditRecipe?, store: ThumbnailStore, pointSize: CGFloat) {
+    func configure(photo: ScannedPhoto, recipe: EditRecipe?, labels: PhotoLabels?, store: ThumbnailStore,
+                   pointSize: CGFloat) {
         label.stringValue = photo.name
         badge.isHidden = recipe == nil
+        let l = labels ?? PhotoLabels()
+        stars.isHidden = l.rating == 0
+        stars.stringValue = " " + String(repeating: "★", count: l.rating) + " "
+        switch l.flag {
+        case .none:
+            flag.isHidden = true
+        case .pick:
+            flag.isHidden = false
+            flag.image = NSImage(systemSymbolName: "flag.fill", accessibilityDescription: "Pick")
+            flag.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        case .reject:
+            flag.isHidden = false
+            flag.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Rejected")
+            flag.layer?.backgroundColor = NSColor.systemRed.cgColor
+        }
+        // Rejects fade back so the keepers stand out.
+        thumb.alphaValue = l.flag == .reject ? 0.4 : 1
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(.image)
-        view.setAccessibilityLabel(recipe == nil ? photo.name : "\(photo.name), edited")
+        var spoken = [photo.name]
+        if recipe != nil { spoken.append("edited") }
+        if l.rating > 0 { spoken.append(l.rating == 1 ? "1 star" : "\(l.rating) stars") }
+        if l.flag == .pick { spoken.append("pick") } else if l.flag == .reject { spoken.append("rejected") }
+        if !l.tags.isEmpty { spoken.append("tags: " + l.tags.joined(separator: ", ")) }
+        view.setAccessibilityLabel(spoken.joined(separator: ", "))
+        view.toolTip = l.tags.isEmpty ? nil : l.tags.joined(separator: ", ")
 
         let pixels = Int(pointSize * (view.window?.backingScaleFactor ?? 2))
         if currentURL != photo.url { thumb.image = nil }

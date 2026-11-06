@@ -7,11 +7,23 @@ public struct MetadataChanges: Codable, Equatable, Sendable {
     public var shiftSeconds: TimeInterval = 0
     /// Keywords to add (kept alongside any already there).
     public var addKeywords: [String] = []
+    /// Keywords to take out (any capitalization).
+    public var removeKeywords: [String] = []
     public var removeLocation = false
 
     public init() {}
 
-    public var isEmpty: Bool { shiftSeconds == 0 && addKeywords.isEmpty && !removeLocation }
+    public var isEmpty: Bool { shiftSeconds == 0 && addKeywords.isEmpty && removeKeywords.isEmpty && !removeLocation }
+
+    enum CodingKeys: String, CodingKey { case shiftSeconds, addKeywords, removeKeywords, removeLocation }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        shiftSeconds = try c.decodeIfPresent(TimeInterval.self, forKey: .shiftSeconds) ?? 0
+        addKeywords = try c.decodeIfPresent([String].self, forKey: .addKeywords) ?? []
+        removeKeywords = try c.decodeIfPresent([String].self, forKey: .removeKeywords) ?? []
+        removeLocation = try c.decodeIfPresent(Bool.self, forKey: .removeLocation) ?? false
+    }
 }
 
 /// Rewrites photo details without re-encoding the pixels.
@@ -51,16 +63,22 @@ public enum MetadataEditor {
             }
         }
 
-        if !changes.addKeywords.isEmpty {
-            let existing = (CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any])
-                .flatMap { $0[kCGImagePropertyIPTCDictionary] as? [CFString: Any] }
-                .flatMap { $0[kCGImagePropertyIPTCKeywords] as? [String] } ?? []
-            var all = existing
+        if !changes.addKeywords.isEmpty || !changes.removeKeywords.isEmpty {
+            var all = PhotoMetadata.keywords(in: src)
+            all.removeAll { k in changes.removeKeywords.contains { $0.caseInsensitiveCompare(k) == .orderedSame } }
             for k in changes.addKeywords where !all.contains(where: { $0.caseInsensitiveCompare(k) == .orderedSame }) {
                 all.append(k)
             }
-            CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyIPTCDictionary,
-                                                         kCGImagePropertyIPTCKeywords, all as CFArray)
+            if all.isEmpty {
+                // Sets both the IPTC keywords and XMP dc:subject.
+                CGImageMetadataRemoveTagWithPath(metadata, nil, "dc:subject" as CFString)
+                CGImageMetadataRemoveTagWithPath(metadata, nil, "Iptc4xmpCore:Keywords" as CFString)
+                CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyIPTCDictionary,
+                                                             kCGImagePropertyIPTCKeywords, [String]() as CFArray)
+            } else {
+                CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyIPTCDictionary,
+                                                             kCGImagePropertyIPTCKeywords, all as CFArray)
+            }
         }
 
         let data = NSMutableData()

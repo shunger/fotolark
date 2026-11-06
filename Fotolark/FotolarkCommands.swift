@@ -78,6 +78,30 @@ struct FotolarkCommands: Commands {
             .disabled(model.targetPhotos.isEmpty)
         }
 
+        CommandMenu("Organize") {
+            Group {
+                Menu("Rating") {
+                    ForEach(0...5, id: \.self) { r in
+                        Button(r == 0 ? "No Stars  (0)" : String(repeating: "★", count: r) + "  (\(r))") { model.applyLabel(.rating(r)) }
+                    }
+                }
+                Button("Pick  (P)") { model.applyLabel(.flag(.pick)) }
+                Button("Reject  (X)") { model.applyLabel(.flag(.reject)) }
+                Button("Clear Flag  (U)") { model.applyLabel(.flag(.none)) }
+                Divider()
+                Menu("Add to Album") {
+                    ForEach(model.albums) { album in
+                        Button(album.name) { model.addToAlbum(album.id) }
+                    }
+                }
+            }
+            .disabled(model.targetPhotos.isEmpty)
+            Button("New Album…") { model.sheet = .newAlbum(model.targetPhotos) }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+            Button("Remove from Album") { model.removeFromCurrentAlbum() }
+                .disabled(model.currentAlbum == nil || model.targetPhotos.isEmpty)
+        }
+
         CommandMenu("Photo") {
             Group {
                 Button("Magic Fix") { editor?.toggleAutoFix(.magicFix) }
