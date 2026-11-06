@@ -35,6 +35,19 @@ struct ScannerTests {
         #expect(folders.map(\.photoCount) == [1, 1, 1, 1, 1])
     }
 
+    @Test func foldersBetweenTheRootAndPhotosAreListed() throws {
+        let root = try makeTempDirectory()
+        let day = root.appendingPathComponent("2026/2026-09-09")
+        try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+        try writePhoto(Grid.numbered(width: 2, height: 2), to: day.appendingPathComponent("a.jpg"))
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("Empty/Deeper"), withIntermediateDirectories: true)
+        let folders = PhotoScanner.folders(under: root)
+        let names = folders.map { $0.url.path.replacingOccurrences(of: root.standardizedFileURL.path, with: "") }
+        #expect(names == ["", "/2026", "/2026/2026-09-09"], "empty folders still left out")
+        #expect(folders.map(\.depth) == [0, 1, 2])
+        #expect(folders.map(\.photoCount) == [0, 0, 1])
+    }
+
     @Test func photosInFolderAreDirectChildrenOnly() throws {
         let root = try makeTree()
         let names = PhotoScanner.photos(in: root.appendingPathComponent("2024")).map(\.name)

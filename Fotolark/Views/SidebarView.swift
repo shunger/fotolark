@@ -174,8 +174,10 @@ private struct FolderRow: View {
     var body: some View {
         Label(folder.name, systemImage: isRoot ? "folder.fill" : "folder")
             .padding(.leading, CGFloat(max(folder.depth - 1, 0)) * 14)
+            // Folders that only hold other folders (such as a year) show no count.
             .badge(folder.photoCount)
+            .foregroundStyle(folder.photoCount == 0 && !isRoot ? .secondary : .primary)
             .help(folder.url.path)
-            .accessibilityValue("\(folder.photoCount) photos")
+            .accessibilityValue(folder.photoCount == 0 ? "holds folders" : "\(folder.photoCount) photos")
     }
 }

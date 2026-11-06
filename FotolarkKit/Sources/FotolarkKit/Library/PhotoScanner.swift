@@ -36,8 +36,8 @@ public enum PhotoScanner {
         .contentModificationDateKey, .creationDateKey,
     ]
 
-    /// Every folder under `root` (including `root` itself) that holds at least one photo,
-    /// in display order: each folder followed by its subfolders, names sorted naturally.
+    /// Every folder under `root` (including `root` itself) that holds photos, or holds
+    /// folders that do, in display order: each folder followed by its subfolders, names sorted naturally.
     /// Hidden folders and packages (such as a Photos library) are skipped.
     public static func folders(under root: URL) -> [ScannedFolder] {
         var counts: [URL: Int] = [:]
@@ -54,8 +54,17 @@ public enum PhotoScanner {
                 counts[url.deletingLastPathComponent().standardizedFileURL, default: 0] += 1
             }
         }
-        let rootPath = root.standardizedFileURL.pathComponents
-        let withPhotos = allFolders.filter { counts[$0, default: 0] > 0 || $0 == root.standardizedFileURL }
+        let rootURL = root.standardizedFileURL
+        let rootPath = rootURL.pathComponents
+        // Folders with photos, plus the folders between them and the root (such as a
+        // "2026" folder holding date folders), so the list matches what's on disk.
+        var withPhotos: Set<URL> = [rootURL]
+        for folder in allFolders where counts[folder, default: 0] > 0 {
+            var f = folder
+            while f.pathComponents.count > rootPath.count, withPhotos.insert(f).inserted {
+                f = f.deletingLastPathComponent().standardizedFileURL
+            }
+        }
         return withPhotos
             .sorted { naturalPathOrder($0, $1) }
             .map { ScannedFolder(url: $0, depth: $0.pathComponents.count - rootPath.count,
