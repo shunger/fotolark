@@ -10,7 +10,8 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
 - Phase 2 (import and bulk tools), in batches:
   1. Browsing — watched folders, thumbnail grid, filmstrip, Info panel, live updates,
      file operations, Settings: **built**
-  2. White balance picker, sharpen/clarity, vignette, histogram, copy/paste edits
+  2. White balance picker, sharpness/clarity/structure, vignette, histogram,
+     copy/paste edits: **built**
   3. Strip metadata, export presets, Share sheet, drag out edited photos
   4. Bulk convert/rename/resize/rotate/move with a job queue
   5. Import from iPhone, camera, SD card and drives

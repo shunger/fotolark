@@ -86,6 +86,22 @@ struct CanvasView: View {
                 CropOverlay(rect: $editor.cropDraft, aspect: editor.normalizedCropAspect)
             case .straighten:
                 GridOverlay(divisions: 8)
+            case .whiteBalance:
+                GeometryReader { geo in
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture(coordinateSpace: .local) { location in
+                            editor.pickWhiteBalance(at: CGPoint(x: location.x / geo.size.width,
+                                                                y: location.y / geo.size.height))
+                        }
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active: NSCursor.crosshair.set()
+                            case .ended: NSCursor.arrow.set()
+                            }
+                        }
+                }
+                .accessibilityLabel("Click something that should be gray")
             case .none:
                 EmptyView()
             }

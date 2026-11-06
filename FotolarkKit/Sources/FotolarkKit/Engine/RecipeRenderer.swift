@@ -21,6 +21,7 @@ public enum RecipeRenderer {
         case .magicFix(let chain): applyChain(chain, to: image)
         case .autoContrast(let levels): applyLevels(levels, to: image)
         case .autoColor(let gains): applyGains(gains, to: image)
+        case .whiteBalance(let gains): applyGains(gains, to: image)
         case .adjust(let a): applyAdjustments(a, to: image)
         case .orient(let o): applyOrientation(o, to: image)
         case .straighten(let degrees): applyStraighten(degrees, to: image)
@@ -135,7 +136,63 @@ public enum RecipeRenderer {
             out = f.outputImage ?? out
         }
 
+        // Detail. Radii scale with the image, so the preview (a smaller copy) looks like
+        // the full-size export.
+        if a.structure != 0 {
+            let f = CIFilter.unsharpMask()
+            f.inputImage = out
+            f.radius = Float(max(1, longest * 0.004))
+            f.intensity = Float(a.structure * 0.8)
+            out = f.outputImage ?? out
+        }
+        if a.clarity != 0 {
+            let f = CIFilter.unsharpMask()
+            f.inputImage = out
+            f.radius = Float(max(2, longest * 0.02))
+            f.intensity = Float(a.clarity * 0.5)
+            out = f.outputImage ?? out
+        }
+        if a.sharpness > 0 {
+            let f = CIFilter.sharpenLuminance()
+            f.inputImage = out
+            f.sharpness = Float(a.sharpness * 1.2)
+            f.radius = Float(max(0.5, longest * 0.0004))
+            out = f.outputImage ?? out
+        }
+
+        if a.vignette != 0 {
+            out = applyVignette(amount: a.vignette, size: a.vignetteSize, to: out.cropped(to: image.extent))
+        }
+
         return out.cropped(to: image.extent)
+    }
+
+    /// Darkens (negative amount) or lightens (positive) toward the corners with a smooth
+    /// radial mask, so both directions look the same.
+    static func applyVignette(amount: Double, size: Double, to image: CIImage) -> CIImage {
+        let e = image.extent
+        let halfDiagonal = hypot(e.width, e.height) / 2
+        // size 0 = only the far corners; size 1 = reaches well into the middle.
+        let inner = halfDiagonal * (0.95 - 0.7 * min(max(size, 0), 1))
+        let mask = CIFilter.radialGradient()
+        mask.center = CGPoint(x: e.midX, y: e.midY)
+        mask.radius0 = Float(inner)
+        mask.radius1 = Float(halfDiagonal)
+        mask.color0 = CIColor(red: 0, green: 0, blue: 0, alpha: 0)
+        mask.color1 = CIColor(red: 0, green: 0, blue: 0, alpha: 1)
+        guard let gradient = mask.outputImage?.cropped(to: e) else { return image }
+        let strength = min(abs(amount), 1)
+        let adjusted: CIImage
+        if amount < 0 {
+            adjusted = image.applyingFilter("CIExposureAdjust", parameters: [kCIInputEVKey: -2.0 * strength])
+        } else {
+            adjusted = image.applyingFilter("CIExposureAdjust", parameters: [kCIInputEVKey: 1.2 * strength])
+        }
+        // Mix: the adjusted image shows through where the gradient is opaque (the corners).
+        return adjusted.applyingFilter("CIBlendWithAlphaMask", parameters: [
+            kCIInputBackgroundImageKey: image,
+            kCIInputMaskImageKey: gradient,
+        ]).cropped(to: e)
     }
 
     // MARK: Geometry

@@ -9,6 +9,8 @@ public enum EditOperation: Equatable, Sendable {
     case autoContrast(Levels)
     /// One-click color-cast removal.
     case autoColor(ChannelGains)
+    /// Neutral point picked by clicking something that should be gray.
+    case whiteBalance(ChannelGains)
     /// Light and color sliders.
     case adjust(Adjustments)
     /// 90° turns and flips.
@@ -23,7 +25,7 @@ public enum EditOperation: Equatable, Sendable {
 
     /// The kind of an operation; a recipe holds at most one operation of each kind.
     public enum Kind: String, Codable, CaseIterable, Sendable, Comparable {
-        case magicFix, autoContrast, autoColor, adjust, orient, straighten, crop, resize
+        case magicFix, autoContrast, autoColor, whiteBalance, adjust, orient, straighten, crop, resize
 
         /// Canonical position in a recipe: tone and color first, then geometry, then size.
         var order: Int { Kind.allCases.firstIndex(of: self)! }
@@ -43,6 +45,7 @@ public enum EditOperation: Equatable, Sendable {
         case .magicFix: .magicFix
         case .autoContrast: .autoContrast
         case .autoColor: .autoColor
+        case .whiteBalance: .whiteBalance
         case .adjust: .adjust
         case .orient: .orient
         case .straighten: .straighten
@@ -57,6 +60,7 @@ public enum EditOperation: Equatable, Sendable {
         case .magicFix(let chain): chain.steps.isEmpty
         case .autoContrast(let levels): levels == .identity
         case .autoColor(let gains): gains == .identity
+        case .whiteBalance(let gains): gains == .identity
         case .adjust(let adjustments): adjustments == Adjustments()
         case .orient(let orientation): orientation == .identity
         case .straighten(let degrees): degrees == 0
@@ -80,6 +84,7 @@ extension EditOperation: Codable {
         case .magicFix: self = .magicFix(try c.decode(FilterChain.self, forKey: .value))
         case .autoContrast: self = .autoContrast(try c.decode(Levels.self, forKey: .value))
         case .autoColor: self = .autoColor(try c.decode(ChannelGains.self, forKey: .value))
+        case .whiteBalance: self = .whiteBalance(try c.decode(ChannelGains.self, forKey: .value))
         case .adjust: self = .adjust(try c.decode(Adjustments.self, forKey: .value))
         case .orient: self = .orient(try c.decode(Orientation.self, forKey: .value))
         case .straighten: self = .straighten(degrees: try c.decode(Double.self, forKey: .value))
@@ -95,6 +100,7 @@ extension EditOperation: Codable {
         case .magicFix(let v): try c.encode(v, forKey: .value)
         case .autoContrast(let v): try c.encode(v, forKey: .value)
         case .autoColor(let v): try c.encode(v, forKey: .value)
+        case .whiteBalance(let v): try c.encode(v, forKey: .value)
         case .adjust(let v): try c.encode(v, forKey: .value)
         case .orient(let v): try c.encode(v, forKey: .value)
         case .straighten(let v): try c.encode(v, forKey: .value)
@@ -125,6 +131,16 @@ public struct Adjustments: Codable, Equatable, Sendable {
     public var tint: Double = 0
     public var saturation: Double = 0
     public var vibrance: Double = 0
+    /// Detail, 0…1 for sharpness, −1…+1 for the others.
+    public var sharpness: Double = 0
+    /// Local contrast over large areas ("clarity").
+    public var clarity: Double = 0
+    /// Local contrast in fine texture.
+    public var structure: Double = 0
+    /// Vignette: negative darkens the corners, positive lightens them.
+    public var vignette: Double = 0
+    /// How far the vignette reaches in from the corners, 0…1.
+    public var vignetteSize: Double = 0.5
 
     public init() {}
 
@@ -145,6 +161,11 @@ public struct Adjustments: Codable, Equatable, Sendable {
         tint = try v(.tint)
         saturation = try v(.saturation)
         vibrance = try v(.vibrance)
+        sharpness = try v(.sharpness)
+        clarity = try v(.clarity)
+        structure = try v(.structure)
+        vignette = try v(.vignette)
+        vignetteSize = try c.decodeIfPresent(Double.self, forKey: .vignetteSize) ?? 0.5
     }
 }
 

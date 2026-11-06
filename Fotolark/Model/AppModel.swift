@@ -339,6 +339,56 @@ final class AppModel {
         }
     }
 
+    // MARK: Copy and paste edits
+
+    /// Tone and color edits copied with Copy Edits.
+    private(set) var copiedEdits: EditRecipe?
+    /// Progress while pasting onto many photos.
+    private(set) var pasteProgress: (done: Int, total: Int)?
+
+    /// The edits of the photo being edited, or of the one selected photo.
+    var editsToCopy: EditRecipe? {
+        let recipe = editor?.recipe ?? (targetPhotos.count == 1 ? recipes[targetPhotos[0]] : nil)
+        guard let edits = recipe?.pastableEdits, !edits.isEmpty else { return nil }
+        return edits
+    }
+
+    func copyEdits() {
+        copiedEdits = editsToCopy
+    }
+
+    var canPasteEdits: Bool { copiedEdits != nil && !targetPhotos.isEmpty && pasteProgress == nil }
+
+    /// Pastes onto the photo being edited (undoable there), or onto every selected photo.
+    func pasteEdits() {
+        guard let copied = copiedEdits else { return }
+        if let editor {
+            editor.paste(copied)
+            return
+        }
+        let targets = targetPhotos
+        guard !targets.isEmpty else { return }
+        let store = store
+        let engine = engine
+        let current = recipes
+        pasteProgress = (0, targets.count)
+        Task {
+            var failed = 0
+            for (i, url) in targets.enumerated() {
+                let result = await Task.detached(priority: .userInitiated) { () -> EditRecipe? in
+                    guard let preview = try? ImageLoader.loadPreview(url, maxPixelSize: 1024) else { return nil }
+                    let target = (current[url] ?? store.load(for: url) ?? EditRecipe()).pasting(copied)
+                    let recipe = engine.recomputingAutoFixes(target, for: preview)
+                    return (try? store.save(recipe, for: url)) != nil ? recipe : nil
+                }.value
+                if let result { recipes[url] = result.isEmpty ? nil : result } else { failed += 1 }
+                pasteProgress = (i + 1, targets.count)
+            }
+            pasteProgress = nil
+            if failed > 0 { errorMessage = "Couldn’t paste edits onto \(failed) of the photos." }
+        }
+    }
+
     // MARK: Settings
 
     var storesEditsInLibrary = UserDefaults.standard.bool(forKey: "storeEditsInLibrary") {

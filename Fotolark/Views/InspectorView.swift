@@ -12,6 +12,7 @@ struct InspectorView: View {
                 switch editor.tool {
                 case .crop: CropPanel(editor: editor)
                 case .straighten: StraightenPanel(editor: editor)
+                case .whiteBalance: WhiteBalancePanel(editor: editor)
                 case .none: mainPanels
                 }
             }
@@ -40,7 +41,15 @@ struct InspectorView: View {
                     }
                 }
             }
-            SliderRow(editor: editor, title: "Fill light", key: \.fillLight, range: 0...1)
+            FixButton(title: "Neutral color picker", systemImage: "eyedropper", isOn: editor.has(.whiteBalance),
+                      help: "Click something in the photo that should be gray or white to remove a color cast") {
+                if editor.has(.whiteBalance) {
+                    editor.apply(editor.recipe.removing(.whiteBalance), label: "Remove white balance")
+                } else {
+                    editor.beginWhiteBalance()
+                }
+            }
+            SliderRow(editor: editor, title: "Fill light", key: \.fillLight, range: 0...1, format: "%.0f")
         }
 
         InspectorSection("Crop and rotate") {
@@ -66,6 +75,7 @@ struct InspectorView: View {
         }
 
         InspectorSection("Light") {
+            HistogramView(histogram: editor.histogram)
             SliderRow(editor: editor, title: "Exposure", key: \.exposure, range: -3...3, format: "%+.2f")
             SliderRow(editor: editor, title: "Brightness", key: \.brightness)
             SliderRow(editor: editor, title: "Contrast", key: \.contrast)
@@ -80,6 +90,17 @@ struct InspectorView: View {
             SliderRow(editor: editor, title: "Tint", key: \.tint)
             SliderRow(editor: editor, title: "Saturation", key: \.saturation)
             SliderRow(editor: editor, title: "Vibrance", key: \.vibrance)
+        }
+
+        InspectorSection("Detail") {
+            SliderRow(editor: editor, title: "Sharpness", key: \.sharpness, range: 0...1, format: "%.0f")
+            SliderRow(editor: editor, title: "Clarity", key: \.clarity)
+            SliderRow(editor: editor, title: "Structure", key: \.structure)
+        }
+
+        InspectorSection("Vignette") {
+            SliderRow(editor: editor, title: "Amount", key: \.vignette)
+            SliderRow(editor: editor, title: "Size", key: \.vignetteSize, range: 0...1, format: "%.0f", defaultValue: 0.5)
         }
 
         InspectorSection("History") {
@@ -160,13 +181,15 @@ struct SliderRow: View {
     let key: WritableKeyPath<Adjustments, Double>
     var range: ClosedRange<Double> = -1...1
     var format = "%+.0f"
+    /// Value a double-click on the name resets to.
+    var defaultValue = 0.0
 
     var body: some View {
         let value = editor.adjustment(key)
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(title)
-                    .onTapGesture(count: 2) { editor.setAdjustment(key, to: 0, label: title) }
+                    .onTapGesture(count: 2) { editor.setAdjustment(key, to: defaultValue, label: title) }
                     .help("Double-click to reset")
                 Spacer()
                 Text(display(value))
@@ -302,5 +325,71 @@ struct StraightenPanel: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
+    }
+}
+
+/// Shown while the neutral color picker is active.
+struct WhiteBalancePanel: View {
+    @Bindable var editor: PhotoEditor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Neutral color picker").font(.headline)
+            Text("Click something in the photo that should be gray or white, such as a cloud, a wall or a shirt. Fotolark removes the color cast to match.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let message = editor.whiteBalanceMessage {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button("Cancel") { editor.tool = .none }
+                .keyboardShortcut(.cancelAction)
+                .controlSize(.large)
+        }
+    }
+}
+
+/// Red, green and blue tone distribution, with the overall brightness in gray.
+struct HistogramView: View {
+    let histogram: Histogram?
+
+    var body: some View {
+        Canvas { context, size in
+            guard let h = histogram else { return }
+            func path(_ values: [Double]) -> Path {
+                var p = Path()
+                let n = values.count
+                p.move(to: CGPoint(x: 0, y: size.height))
+                for (i, v) in values.enumerated() {
+                    let x = size.width * CGFloat(i) / CGFloat(max(n - 1, 1))
+                    p.addLine(to: CGPoint(x: x, y: size.height * (1 - CGFloat(v))))
+                }
+                p.addLine(to: CGPoint(x: size.width, y: size.height))
+                p.closeSubpath()
+                return p
+            }
+            context.fill(path(h.luminance), with: .color(.gray.opacity(0.45)))
+            context.blendMode = .plusLighter
+            context.fill(path(h.red), with: .color(.red.opacity(0.45)))
+            context.fill(path(h.green), with: .color(.green.opacity(0.45)))
+            context.fill(path(h.blue), with: .color(.blue.opacity(0.45)))
+        }
+        .frame(height: 64)
+        .background(Color.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .accessibilityElement()
+        .accessibilityLabel("Histogram")
+        .accessibilityValue(summary)
+    }
+
+    /// Spoken summary: where most tones sit.
+    private var summary: String {
+        guard let l = histogram?.luminance, !l.isEmpty else { return "Not available" }
+        let third = l.count / 3
+        let parts = [l[..<third].reduce(0, +), l[third..<(2 * third)].reduce(0, +), l[(2 * third)...].reduce(0, +)]
+        let names = ["mostly dark tones", "mostly middle tones", "mostly bright tones"]
+        return names[parts.firstIndex(of: parts.max()!)!]
     }
 }

@@ -13,7 +13,7 @@ struct SendableImage: @unchecked Sendable {
 /// and saves the recipe to the sidecar file.
 @MainActor @Observable
 final class PhotoEditor {
-    enum Tool { case none, crop, straighten }
+    enum Tool { case none, crop, straighten, whiteBalance }
 
     /// Longest side of the copy used while editing; full resolution is loaded only for
     /// close-up zoom and export.
@@ -27,6 +27,10 @@ final class PhotoEditor {
     private(set) var recipe: EditRecipe
     private(set) var preview: CGImage?
     private(set) var previewIsFullResolution = false
+    /// Histogram of what's on screen.
+    private(set) var histogram: Histogram?
+    /// Shown in the panel when a white balance click couldn't be used.
+    var whiteBalanceMessage: String?
 
     var tool: Tool = .none { didSet { if tool != oldValue { scheduleRender() } } }
     var showOriginal = false { didSet { if showOriginal != oldValue { scheduleRender() } } }
@@ -201,6 +205,50 @@ final class PhotoEditor {
         }
     }
 
+    // MARK: White balance picker
+
+    func beginWhiteBalance() {
+        commitPending()
+        whiteBalanceMessage = nil
+        tool = .whiteBalance
+    }
+
+    /// Makes the spot clicked (normalized, top-left origin) neutral gray.
+    func pickWhiteBalance(at point: CGPoint) {
+        guard let proxy else { return }
+        let sample = SendableImage(image: EditEngine.whiteBalanceSamplingImage(recipe, source: proxy.image))
+        let engine = engine
+        Task {
+            let gains = await Task.detached(priority: .userInitiated) {
+                engine.neutralGains(in: sample.image, at: point)
+            }.value
+            guard let gains else {
+                whiteBalanceMessage = "That spot is too dark or too bright. Click something light gray or white, like a cloud, a wall or a shirt."
+                return
+            }
+            whiteBalanceMessage = nil
+            tool = .none
+            apply(recipe.setting(.whiteBalance(gains)), label: "White balance")
+        }
+    }
+
+    // MARK: Copy and paste
+
+    /// Pastes copied tone and color edits, working the one-click fixes out for this photo.
+    func paste(_ copied: EditRecipe) {
+        guard let proxy else { return }
+        let target = recipe.pasting(copied)
+        let engine = engine
+        isBusy = true
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                engine.recomputingAutoFixes(target, for: proxy.image)
+            }.value
+            isBusy = false
+            apply(result, label: "Paste edits")
+        }
+    }
+
     // MARK: Geometry
 
     func rotate(clockwise: Bool) {
@@ -325,10 +373,12 @@ final class PhotoEditor {
             let usingFull = wantFull && full != nil
             let shown = shownRecipe
             let engine = engine
-            let image = await Task.detached(priority: .userInitiated) {
-                engine.render(shown, source: source.image, includeResize: false)
+            let (image, histogram) = await Task.detached(priority: .userInitiated) {
+                (engine.render(shown, source: source.image, includeResize: false),
+                 engine.histogram(of: RecipeRenderer.apply(shown, to: proxy.image, includeResize: false)))
             }.value
             preview = image
+            self.histogram = histogram
             previewIsFullResolution = usingFull
         }
         isRendering = false

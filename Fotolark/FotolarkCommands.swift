@@ -53,12 +53,24 @@ struct FotolarkCommands: Commands {
                 .disabled(!(editor?.history.canRedo ?? false))
         }
 
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            Button("Copy Edits") { model.copyEdits() }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .disabled(model.editsToCopy == nil)
+            Button("Paste Edits") { model.pasteEdits() }
+                .keyboardShortcut("v", modifiers: [.command, .shift])
+                .disabled(!model.canPasteEdits)
+        }
+
         CommandMenu("Photo") {
             Group {
                 Button("Magic Fix") { editor?.toggleAutoFix(.magicFix) }
                     .keyboardShortcut("m", modifiers: [.command, .shift])
                 Button("Auto Contrast") { editor?.toggleAutoFix(.autoContrast) }
                 Button("Auto Color") { editor?.toggleAutoFix(.autoColor) }
+                Button("Neutral Color Picker") { editor?.beginWhiteBalance() }
+                    .keyboardShortcut("b", modifiers: [.command, .option])
                 Divider()
                 Button("Crop…") { editor?.beginCrop(); model.zoomToFit() }
                     .keyboardShortcut("c", modifiers: [.command, .option])

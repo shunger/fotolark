@@ -18,6 +18,15 @@ struct BrowserView: View {
             }
         }
         .toolbar {
+            if let progress = model.pasteProgress {
+                ToolbarItem {
+                    ProgressView(value: Double(progress.done), total: Double(progress.total)) {
+                        Text("Pasting edits \(progress.done) of \(progress.total)")
+                    }
+                    .frame(width: 160)
+                    .font(.caption)
+                }
+            }
             ToolbarItem {
                 Picker("Sort", selection: $model.sortOrder) {
                     ForEach(PhotoSortOrder.allCases) { Text($0.title).tag($0) }
@@ -72,6 +81,10 @@ enum FileMenu {
         let menu = NSMenu()
         let count = model.targetPhotos.count
         menu.addItem(ActionItem("Open", enabled: count == 1) { model.openSelection() })
+        menu.addItem(.separator())
+        menu.addItem(ActionItem("Copy Edits", enabled: model.editsToCopy != nil) { model.copyEdits() })
+        menu.addItem(ActionItem(count == 1 ? "Paste Edits" : "Paste Edits onto \(count) Photos",
+                                enabled: model.canPasteEdits) { model.pasteEdits() })
         menu.addItem(.separator())
         menu.addItem(ActionItem("Show in Finder") { model.revealInFinder() })
         menu.addItem(ActionItem("Rename…", enabled: count == 1) { model.sheet = .rename })
