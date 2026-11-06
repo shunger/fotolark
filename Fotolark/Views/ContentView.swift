@@ -5,47 +5,29 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @Bindable var model: AppModel
     @AppStorage("showInspector") private var showInspector = true
+    @AppStorage("showFilmstrip") private var showFilmstrip = true
     @State private var isDropTargeted = false
+    @State private var columns = NavigationSplitViewVisibility.all
 
     var body: some View {
-        Group {
-            if let editor = model.editor {
-                HStack(spacing: 0) {
-                    CanvasView(editor: editor, model: model)
-                    if showInspector {
-                        Divider()
-                        InspectorView(editor: editor, model: model)
-                            .frame(width: 290)
-                    }
-                }
-                .toolbar { EditorToolbar(editor: editor, model: model, showInspector: $showInspector) }
-                .sheet(item: $model.sheet) { sheet in
-                    switch sheet {
-                    case .export: ExportSheet(editor: editor, model: model)
-                    case .resize: ResizeSheet(editor: editor)
-                    }
-                }
-                .alert("Save over the original?", isPresented: $model.isConfirmingOverwrite) {
-                    Button("Save Over Original", role: .destructive) { model.saveOverOriginal() }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("“\(editor.url.lastPathComponent)” will be replaced with the edited version. A backup of the original is kept and can be found with File › Show Backups in Finder.")
-                }
-            } else {
-                EmptyStateView(model: model, isDropTargeted: isDropTargeted)
-                    .toolbar {
-                        ToolbarItem {
-                            Button("Open", systemImage: "folder") { model.showOpenPanel() }
-                        }
-                    }
-            }
+        NavigationSplitView(columnVisibility: $columns) {
+            SidebarView(model: model)
+        } detail: {
+            detail
         }
-        .navigationTitle(model.editor?.url.lastPathComponent ?? "Fotolark")
+        .navigationTitle(title)
         .navigationSubtitle(subtitle)
         .dropDestination(for: URL.self) { urls, _ in
             model.open(urls)
             return true
         } isTargeted: { isDropTargeted = $0 }
+        .sheet(item: $model.sheet) { sheet in
+            switch sheet {
+            case .export: if let editor = model.editor { ExportSheet(editor: editor, model: model) }
+            case .resize: if let editor = model.editor { ResizeSheet(editor: editor) }
+            case .rename: if let url = model.targetPhotos.first { RenameSheet(model: model, url: url) }
+            }
+        }
         .alert("Something went wrong", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -56,10 +38,85 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var detail: some View {
+        if let editor = model.editor {
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    CanvasView(editor: editor, model: model)
+                    if showFilmstrip && model.photos.count > 1 {
+                        Divider()
+                        FilmstripView(model: model, current: editor.url)
+                    }
+                }
+                if showInspector {
+                    Divider()
+                    EditorSidePanel(editor: editor, model: model)
+                        .frame(width: 290)
+                }
+            }
+            .toolbar { EditorToolbar(editor: editor, model: model, showInspector: $showInspector) }
+            .alert("Save over the original?", isPresented: $model.isConfirmingOverwrite) {
+                Button("Save Over Original", role: .destructive) { model.saveOverOriginal() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("“\(editor.url.lastPathComponent)” will be replaced with the edited version. A backup of the original is kept and can be found with File › Show Backups in Finder.")
+            }
+        } else if model.source != nil {
+            BrowserView(model: model)
+                .toolbar {
+                    ToolbarItem(placement: .navigation) {
+                        Button("Open", systemImage: "plus") { model.showOpenPanel() }
+                            .help("Open photos or add a folder (⌘O)")
+                    }
+                }
+        } else {
+            EmptyStateView(model: model, isDropTargeted: isDropTargeted)
+        }
+    }
+
+    private var title: String {
+        if let editor = model.editor { return editor.url.lastPathComponent }
+        switch model.source {
+        case .folder(let url): return url.lastPathComponent
+        case .opened: return "Opened Photos"
+        case nil: return "Fotolark"
+        }
+    }
+
     private var subtitle: String {
-        guard let editor = model.editor, let i = model.index else { return "" }
-        let position = model.photos.count > 1 ? "\(i + 1) of \(model.photos.count) · " : ""
-        return position + "\(editor.editedSize) px"
+        if let editor = model.editor {
+            return [model.positionText, "\(editor.editedSize.description) px"].compactMap { $0 }.joined(separator: " · ")
+        }
+        guard model.source != nil else { return "" }
+        let n = model.photos.count
+        let selected = model.selection.count > 1 ? " · \(model.selection.count) selected" : ""
+        return (n == 1 ? "1 photo" : "\(n) photos") + selected
+    }
+}
+
+/// The editor's right-hand panel: editing controls, or the photo's details.
+struct EditorSidePanel: View {
+    @Bindable var editor: PhotoEditor
+    @Bindable var model: AppModel
+    @AppStorage("editorPanel") private var panel = "edit"
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("Panel", selection: $panel) {
+                Text("Edit").tag("edit")
+                Text("Info").tag("info")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding([.horizontal, .top], 12)
+            .disabled(editor.tool != .none)
+            if panel == "info" && editor.tool == .none {
+                InfoPanel(model: model, url: editor.url)
+            } else {
+                InspectorView(editor: editor, model: model)
+            }
+        }
     }
 }
 
@@ -70,6 +127,8 @@ struct EditorToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
+            Button("All Photos", systemImage: "square.grid.2x2") { model.closeEditor() }
+                .help("Back to all photos (Esc)")
             Button("Previous", systemImage: "chevron.left") { model.previous() }
                 .disabled(!model.canGoPrevious)
                 .help("Previous photo (←)")

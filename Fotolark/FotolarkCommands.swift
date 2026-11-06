@@ -5,6 +5,8 @@ struct FotolarkCommands: Commands {
     let model: AppModel
     @AppStorage("showInspector") private var showInspector = true
     @AppStorage("neutralGrayBackground") private var neutralGray = false
+    @AppStorage("showInfo") private var showInfo = true
+    @AppStorage("showFilmstrip") private var showFilmstrip = true
 
     private var editor: PhotoEditor? { model.editor }
 
@@ -12,6 +14,8 @@ struct FotolarkCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("Open…") { model.showOpenPanel() }
                 .keyboardShortcut("o")
+            Button("Add Folder…") { model.addFolderWithPanel() }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
         }
 
         CommandGroup(replacing: .saveItem) {
@@ -24,6 +28,20 @@ struct FotolarkCommands: Commands {
             Button("Revert to Original") { editor?.revertToOriginal() }
                 .disabled(!(editor?.isEdited ?? false))
             Button("Show Backups in Finder") { model.showBackupsInFinder() }
+            Divider()
+            Button("Show in Finder") { model.revealInFinder() }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(model.targetPhotos.isEmpty)
+            Button("Rename…") { model.sheet = .rename }
+                .disabled(model.targetPhotos.count != 1)
+            Button("Copy To…") { model.moveOrCopyTargets(copy: true) }
+                .disabled(model.targetPhotos.isEmpty)
+            Button("Move To…") { model.moveOrCopyTargets(copy: false) }
+                .disabled(model.targetPhotos.isEmpty)
+            Button("Move to Trash") { model.moveTargetsToTrash() }
+                .keyboardShortcut(.delete)
+                // Off while a sheet is open, so ⌘⌫ in a text field never trashes a photo.
+                .disabled(model.targetPhotos.isEmpty || model.sheet != nil)
         }
 
         CommandGroup(replacing: .undoRedo) {
@@ -76,6 +94,11 @@ struct FotolarkCommands: Commands {
             Toggle("Neutral Gray Background", isOn: $neutralGray)
             Toggle("Show Editing Panel", isOn: $showInspector)
                 .keyboardShortcut("i", modifiers: [.command, .option])
+            Toggle("Show Info", isOn: $showInfo)
+                .keyboardShortcut("i")
+            Toggle("Show Filmstrip", isOn: $showFilmstrip)
+            Button("Back to All Photos") { model.closeEditor() }
+                .disabled(editor == nil)
             Divider()
         }
     }

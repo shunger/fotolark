@@ -33,6 +33,8 @@ final class PhotoEditor {
     /// Set by the canvas: how many pixels across the photo is drawn on screen.
     var displayPixelsNeeded = 0 { didSet { if needsFullResolution != previewIsFullResolution { scheduleRender() } } }
     var isBusy = false
+    /// Called after the recipe is saved, so thumbnails can show the edit.
+    var onSave: ((URL, EditRecipe) -> Void)?
 
     // Crop tool state
     var cropDraft = CropRect.full
@@ -339,12 +341,13 @@ final class PhotoEditor {
         let recipe = history.current
         let url = url
         let store = store
-        saveTask = Task {
+        saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
             await Task.detached(priority: .utility) {
                 _ = try? store.save(recipe, for: url)
             }.value
+            self?.onSave?(url, recipe)
         }
     }
 
@@ -354,6 +357,7 @@ final class PhotoEditor {
         saveTask?.cancel()
         saveTask = nil
         _ = try? store.save(history.current, for: url)
+        onSave?(url, history.current)
     }
 
     // MARK: Export

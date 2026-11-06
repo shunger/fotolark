@@ -6,8 +6,15 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
 
 ## Status
 
-Phase 1 (core editor) in progress: the editor works end to end and is ready for the
-"edit 20 of your own photos" gate.
+- Phase 1 (core editor): built; waiting on the "edit 20 of your own photos" gate.
+- Phase 2 (import and bulk tools), in batches:
+  1. Browsing — watched folders, thumbnail grid, filmstrip, Info panel, live updates,
+     file operations, Settings: **built**
+  2. White balance picker, sharpen/clarity, vignette, histogram, copy/paste edits
+  3. Strip metadata, export presets, Share sheet, drag out edited photos
+  4. Bulk convert/rename/resize/rotate/move with a job queue
+  5. Import from iPhone, camera, SD card and drives
+  6. Shortcut cheat sheet and accessibility pass
 
 ## Build and test
 

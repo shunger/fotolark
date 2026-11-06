@@ -48,7 +48,10 @@ struct CanvasView: View {
             return .handled
         }
         .onKeyPress(.escape) {
-            guard editor.tool != .none else { return .ignored }
+            guard editor.tool != .none else {
+                model.closeEditor()
+                return .handled
+            }
             if editor.tool == .crop { editor.cancelCrop() } else { editor.tool = .none }
             return .handled
         }

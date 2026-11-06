@@ -14,6 +14,10 @@ struct FotolarkApp: App {
         }
         .defaultSize(width: 1280, height: 820)
         .commands { FotolarkCommands(model: model) }
+
+        Settings {
+            SettingsView(model: model)
+        }
     }
 }
 
