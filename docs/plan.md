@@ -36,7 +36,7 @@ The app will be built in Swift with SwiftUI, on Apple's own frameworks only. Tha
 
 **Shared engine for Mac, iPad and iPhone:** from day one, the code is split into two parts. A shared *FotolarkKit* package holds edit recipes, Core Image filters, file input/output, bulk jobs and Vision features. A thin interface layer is written separately for each device. Nearly all of these Apple frameworks also exist on iPadOS and iOS, so Phase 6 is mostly new screens, not new editing code. The exceptions are folder watching, Finder integration and Quick Look Services, which are Mac-only.
 
-**Distribution:** the minimum is macOS 14 Sonoma, and iPadOS 17 / iOS 17 for Phase 6. The app runs on both Apple silicon and Intel (tested on a family Intel Mac) and is sandboxed for the Mac App Store, or notarized for direct download.
+**Distribution:** the minimum is macOS 14 Sonoma, and iPadOS 17 / iOS 17 for Phase 6. The app runs on both Apple silicon and Intel (tested on a family Intel Mac) and is sandboxed and released through the Mac App Store, which also delivers updates (decided Nov 6, 2026).
 
 ## Full feature list
 
@@ -199,7 +199,7 @@ Bulk tools work on hundreds or thousands of photos at once. Every bulk job shows
 | Shortcuts app actions | Automate resize, convert and auto-fix | 5 |
 | Accessibility | VoiceOver labels, keyboard-only use, larger text, reduced motion | 2 onward |
 | Help and onboarding | First-run tour, built-in help, tooltips | 5 |
-| Auto-update | Sparkle (direct download) or the App Store | 5 |
+| Auto-update | Through the Mac App Store | 5 |
 
 ### 11. iPad and iPhone
 
@@ -229,7 +229,7 @@ The full version ships in six phases plus an optional seventh, and each one ends
 | 2 | Import and bulk tools | 6–9 | Folder sidebar, grid, filmstrip, info panel; import from iPhone, camera, SD card; bulk rename, convert; share sheet, export presets, shortcuts, preferences | A 10,000-photo folder scrolls smoothly |
 | 3 | Retouch and creative | 5–8 | RAW, curves, HSL, noise reduction, red-eye; spot heal, clone, soften skin; effects and presets; text, watermarks, compare view | Retouching looks natural on real photos |
 | 4 | Organize and print | 6–10 | Stars, tags, albums, search, timeline, slideshow; brushes, gradients, object removal, background tools; print, collage, contact sheet, PDF | A month of daily use; feature list re-checked |
-| 5 | Extras and release | 3–5 | Faces, duplicates; Apple Photos access; Finder and Shortcuts actions, onboarding, help; notarize or App Store, auto-update | Mac app in daily use; join the Apple Developer Program |
+| 5 | Extras and release | 3–5 | Faces, duplicates; Apple Photos access; Finder and Shortcuts actions, onboarding, help; Mac App Store release and updates | Mac app in daily use; join the Apple Developer Program |
 | 6 | iPad and iPhone | 8–12 | Touch interface for iPad; Apple Pencil retouching; camera and SD card import; simpler iPhone layout; edit inside Photos; bulk convert | Optional: start Phase 7 only if you want maps |
 | 7 | Maps (optional, future) | 1–2 | Map of a photo's location in the info panel; Places map of all GPS-tagged photos; built on MapKit | — |
 
@@ -268,9 +268,10 @@ The hardest parts are the interactive tools (crop handles, brushes, healing) and
 **Decisions needed:**
 
 - [x] App name: Fotolark (chosen Nov 6, 2026 — see `naming-and-legal.md`)
-- [ ] Free, one-time price or donation? This decides App Store vs. direct download.
+- [x] Release through the Mac App Store, which handles updates (decided Nov 6, 2026)
+- [ ] Free or a one-time price on the App Store?
 - [x] Edit recipes: sidecar files beside each photo (decided Nov 6, 2026)
-- [ ] Personal use only, or for family and friends too? This decides whether notarization and an installer are needed.
+- [ ] Personal use only, or for family and friends too? (Through the App Store either works, with no notarization or installer.)
 
 ## Next steps
 
