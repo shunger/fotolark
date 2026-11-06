@@ -516,6 +516,7 @@ struct RetouchPanel: View {
                 Text("Spot heal").tag(RetouchStroke.Tool.heal)
                 Text("Clone").tag(RetouchStroke.Tool.clone)
                 Text("Soften skin").tag(RetouchStroke.Tool.soften)
+                Text("Remove").tag(RetouchStroke.Tool.remove)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -553,6 +554,7 @@ struct RetouchPanel: View {
         case .heal: "Click a spot or paint over a blemish. Fotolark fills it with nearby texture that matches the light around it."
         case .clone: "⌥-click (Option-click) the area to copy from, then paint where it should go."
         case .soften: "Paint over skin to smooth it gently. Leave eyes, lips and hair sharp."
+        case .remove: "Paint over an unwanted object, a little past its edges. Fotolark fills it in from the surroundings. Works best on simple backgrounds such as sky, grass, sand or walls."
         }
     }
 }

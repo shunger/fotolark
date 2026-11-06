@@ -35,7 +35,7 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
   2. Library index, search (including text in photos), filters, timeline: **built**
   3. Slideshow: **built**
   4. Brush and gradient adjustments, tilt-shift, lens correction: **built**
-  5. Object removal, background blur, remove background
+  5. Object removal, background blur, remove background: **built**
   6. Borders and frames, shapes and arrows, versions
   7. Print, contact sheet, collage, PDF
 

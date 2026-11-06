@@ -59,6 +59,22 @@ struct EffectsControls: View {
                 .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
             }
 
+            HStack {
+                Toggle("Blur background", isOn: Binding(get: { editor.recipe.backgroundBlur != nil },
+                                                        set: { _ in editor.toggleBackgroundBlur() }))
+                    .help("Finds the subject (people, pets, objects in front) and blurs what's behind it, like a portrait lens")
+                Spacer()
+                Button("Remove Background…") { model.removeBackground() }
+                    .controlSize(.small)
+                    .help("Save the subject alone as a PNG with a see-through background")
+            }
+            if let blur = editor.recipe.backgroundBlur {
+                slider("Amount", value: blur.amount) { editor.setBackgroundBlurAmount($0) }
+            }
+            if let message = editor.toolMessage, editor.tool == .none {
+                Label(message, systemImage: "info.circle").font(.callout).fixedSize(horizontal: false, vertical: true)
+            }
+
             Button {
                 editor.beginTiltShift()
             } label: {

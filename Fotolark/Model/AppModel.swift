@@ -854,6 +854,46 @@ final class AppModel {
         if case .album(id) = source { source = nil }
     }
 
+    // MARK: Remove background
+
+    /// Saves each photo's subject (with its edits) as a PNG with a see-through background.
+    func removeBackground() {
+        let targets = targetPhotos
+        guard !targets.isEmpty else { return }
+        let recipes = Dictionary(uniqueKeysWithValues: targets.map { ($0, recipe(for: $0)) })
+        let engine = engine
+        if targets.count == 1 {
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.png]
+            panel.nameFieldStringValue = targets[0].deletingPathExtension().lastPathComponent + " cutout.png"
+            panel.message = "Save the subject on a see-through background"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            let photo = targets[0]
+            jobs.run("Remove background from \(photo.lastPathComponent)", items: [photo],
+                     outputFolder: url.deletingLastPathComponent(), name: { $0.lastPathComponent }) { photo in
+                let png = try engine.cutout(source: photo, recipe: recipes[photo] ?? EditRecipe())
+                try png.write(to: url, options: .atomic)
+                return [.removeCreatedFile(url)]
+            }
+        } else {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.canCreateDirectories = true
+            panel.prompt = "Save Here"
+            panel.message = "Choose where to save \(targets.count) cutouts (PNG, see-through background)."
+            guard panel.runModal() == .OK, let folder = panel.url else { return }
+            jobs.run("Remove background from \(targets.count) photos", items: targets, outputFolder: folder,
+                     name: { $0.lastPathComponent }) { photo in
+                let png = try engine.cutout(source: photo, recipe: recipes[photo] ?? EditRecipe())
+                let target = PhotoFileOperations.availableURL(
+                    for: photo.deletingPathExtension().lastPathComponent + " cutout.png", in: folder)
+                try png.write(to: target, options: .withoutOverwriting)
+                return [.removeCreatedFile(target)]
+            }
+        }
+    }
+
     // MARK: Slideshow
 
     var canStartSlideshow: Bool { !photos.isEmpty && comparing == nil }

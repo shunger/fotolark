@@ -150,6 +150,36 @@ extension PhotoEditor {
         setTiltShift(t, live: live)
     }
 
+    // MARK: Background blur
+
+    /// Finds the subject and blurs what's behind it; or turns the blur off.
+    func toggleBackgroundBlur() {
+        if recipe.backgroundBlur != nil {
+            apply(recipe.removing(.backgroundBlur), label: "Remove background blur")
+            return
+        }
+        guard let proxyImage else { return }
+        let before = SendableImage(image: RecipeRenderer.apply(recipe.prefix(before: .backgroundBlur), to: proxyImage))
+        let engine = engine
+        isBusy = true
+        toolMessage = nil
+        Task {
+            let mask = await Task.detached(priority: .userInitiated) { engine.subjectMask(for: before.image) }.value
+            isBusy = false
+            guard let mask else {
+                toolMessage = SubjectError.noSubject.localizedDescription
+                return
+            }
+            apply(recipe.setting(.backgroundBlur(BackgroundBlur(amount: 0.5, mask: mask))), label: "Background blur")
+        }
+    }
+
+    func setBackgroundBlurAmount(_ amount: Double) {
+        guard var b = recipe.backgroundBlur else { return }
+        b.amount = amount
+        setLive(recipe.setting(.backgroundBlur(b)), label: "Background blur")
+    }
+
     // MARK: Lens
 
     func setLens(_ lens: LensCorrection) {

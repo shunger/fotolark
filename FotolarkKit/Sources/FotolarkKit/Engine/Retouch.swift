@@ -11,6 +11,8 @@ public struct RetouchStroke: Codable, Equatable, Sendable {
         case clone
         /// Smooths skin.
         case soften
+        /// Fills a larger area (an unwanted object) in from its surroundings.
+        case remove
     }
 
     public var tool: Tool
@@ -70,6 +72,13 @@ extension RecipeRenderer {
                 // patch − low(patch) + low(target)
                 replacement = ImageMath.weightedSum([(patch, 1), (lowPatch, -1), (lowTarget, 1)], extent: e)
             }
+        case .remove:
+            // The hole reaches a little past the brush, so the object's soft edge isn't
+            // used to fill it.
+            let hole = dabMask(points: s.points, radius: s.radius * 1.25, in: e) ?? mask
+            let shift = CGAffineTransform(translationX: -s.sourceOffset.x * e.width, y: s.sourceOffset.y * e.height)
+            let patch = image.clampedToExtent().transformed(by: shift).cropped(to: e)
+            replacement = fillHole(image, mask: hole, patch: patch, textureSigma: max(1.5, r * 0.25))
         case .soften:
             // A smooth copy with a little of the original texture kept, so skin doesn't look plastic.
             let smooth = image.clampedToExtent()

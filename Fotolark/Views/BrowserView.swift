@@ -214,6 +214,9 @@ enum FileMenu {
             bulk.submenu?.addItem(ActionItem("\(tool.title)…") { model.sheet = .bulk(tool) })
         }
         menu.addItem(bulk)
+        menu.addItem(ActionItem(count == 1 ? "Remove Background…" : "Remove Background from \(count) Photos…") {
+            model.removeBackground()
+        })
         menu.addItem(ActionItem("Copy To…") { model.moveOrCopyTargets(copy: true) })
         menu.addItem(ActionItem("Move To…") { model.moveOrCopyTargets(copy: false) })
         menu.addItem(.separator())

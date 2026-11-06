@@ -55,9 +55,11 @@ final class PhotoEditor {
     var customAspectWidth = 4.0 { didSet { applyAspectToDraft() } }
     var customAspectHeight = 3.0 { didSet { applyAspectToDraft() } }
 
-    private let engine: EditEngine
+    let engine: EditEngine
     private let store: RecipeStore
     private var proxy: SendableImage?
+    /// The working copy used for previews and one-click analysis.
+    var proxyImage: CIImage? { proxy?.image }
     private var full: SendableImage?
     private var isLoadingFull = false
     private var pendingLabel: String?
@@ -338,7 +340,8 @@ final class PhotoEditor {
         case .soften:
             appendStroke(RetouchStroke(tool: .soften, points: curvePoints, radius: radius, strength: softenStrength),
                          label: "Soften skin")
-        case .heal:
+        case .heal, .remove:
+            let tool = retouchTool
             guard let proxy else { return }
             // Pick the source for the middle of the stroke, far enough to clear all of it.
             let xs = source.map(\.x), ys = source.map(\.y)
@@ -355,8 +358,8 @@ final class PhotoEditor {
                     engine.healSourceOffset(for: center, radius: reach, in: image.image)
                 }.value
                 isBusy = false
-                appendStroke(RetouchStroke(tool: .heal, points: curvePoints, radius: radius, sourceOffset: offset),
-                             label: "Spot heal")
+                appendStroke(RetouchStroke(tool: tool, points: curvePoints, radius: radius, sourceOffset: offset),
+                             label: tool == .remove ? "Remove object" : "Spot heal")
             }
         }
     }

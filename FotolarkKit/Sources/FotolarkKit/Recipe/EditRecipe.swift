@@ -60,6 +60,11 @@ public struct EditRecipe: Codable, Equatable, Sendable {
         return nil
     }
 
+    public var backgroundBlur: BackgroundBlur? {
+        if case .backgroundBlur(let b) = operation(.backgroundBlur) { return b }
+        return nil
+    }
+
     public var resize: ResizeSpec? {
         if case .resize(let r) = operation(.resize) { return r }
         return nil

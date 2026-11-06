@@ -30,6 +30,8 @@ struct FotolarkCommands: Commands {
             Button("Export…") { model.sheet = .export }
                 .keyboardShortcut("e")
                 .disabled(model.targetPhotos.isEmpty)
+            Button("Remove Background…") { model.removeBackground() }
+                .disabled(model.targetPhotos.isEmpty)
             Button("Save Over Original…") { model.isConfirmingOverwrite = true }
                 .disabled(!canSaveOver)
             Divider()
