@@ -300,12 +300,23 @@ final class AppModel {
 
     // MARK: Editing
 
+    /// Each photo's undo history, kept while Fotolark is open, so moving to another
+    /// photo and back doesn't lose it.
+    private var histories: [URL: EditHistory] = [:]
+
+    private func rememberHistory() {
+        guard let editor else { return }
+        editor.commitPending()
+        histories[editor.url] = editor.history
+    }
+
     func openEditor(_ url: URL) {
         comparing = nil
         editor?.saveNow()
+        rememberHistory()
         zoomScale = nil
         do {
-            let e = try PhotoEditor(url: url, engine: engine, store: store)
+            let e = try PhotoEditor(url: url, engine: engine, store: store, previous: histories[url])
             e.onSave = { [weak self] url, recipe in
                 self?.recipes[url] = recipe.isEmpty ? nil : recipe
             }
@@ -320,6 +331,7 @@ final class AppModel {
     func closeEditor() {
         guard let editor else { return }
         editor.saveNow()
+        rememberHistory()
         selection = [editor.url]
         self.editor = nil
     }
@@ -501,22 +513,14 @@ final class AppModel {
         guard !targets.isEmpty else { return }
         let store = store
         let engine = engine
-        let current = recipes
-        pasteProgress = (0, targets.count)
-        Task {
-            var failed = 0
-            for (i, url) in targets.enumerated() {
-                let result = await Task.detached(priority: .userInitiated) { () -> EditRecipe? in
-                    guard let preview = try? ImageLoader.loadPreview(url, maxPixelSize: 1024) else { return nil }
-                    let target = (current[url] ?? store.load(for: url) ?? EditRecipe()).pasting(copied)
-                    let recipe = engine.recomputingAutoFixes(target, for: preview)
-                    return (try? store.save(recipe, for: url)) != nil ? recipe : nil
-                }.value
-                if let result { recipes[url] = result.isEmpty ? nil : result } else { failed += 1 }
-                pasteProgress = (i + 1, targets.count)
-            }
-            pasteProgress = nil
-            if failed > 0 { errorMessage = "Couldn’t paste edits onto \(failed) of the photos." }
+        // A job, so it shows progress and can be undone (⌘Z in the grid, or the Jobs list).
+        jobs.run("Paste edits onto \(targets.count == 1 ? targets[0].lastPathComponent : "\(targets.count) photos")",
+                 items: targets, name: { $0.lastPathComponent }) { url in
+            let old = store.load(for: url)
+            let preview = try ImageLoader.loadPreview(url, maxPixelSize: 1024)
+            let recipe = engine.recomputingAutoFixes((old ?? EditRecipe()).pasting(copied), for: preview)
+            try store.save(recipe, for: url)
+            return [.restoreRecipe(url, old)]
         }
     }
 
@@ -1073,6 +1077,37 @@ final class AppModel {
                 try png.write(to: target, options: .withoutOverwriting)
                 return [.removeCreatedFile(target)]
             }
+        }
+    }
+
+    // MARK: Undo outside the editor
+
+    /// The latest bulk job that can still be undone (Edit › Undo in the grid).
+    var undoableJob: JobQueue.Job? {
+        // Only the most recent job, and only if undoing it can't throw files away.
+        jobs.jobs.first { $0.canUndo }.flatMap { $0.canQuickUndo ? $0 : nil }
+    }
+
+    func undoLatestJob() {
+        guard let job = undoableJob else { return }
+        jobs.undo(job, store: store)
+    }
+
+    /// Takes all edits off the photo being edited, or off every selected photo (as an
+    /// undoable job).
+    func revertTargetsToOriginal() {
+        if let editor {
+            editor.revertToOriginal()
+            return
+        }
+        let targets = targetPhotos.filter { recipes[$0] != nil }
+        guard !targets.isEmpty else { return }
+        let store = store
+        jobs.run("Revert \(targets.count == 1 ? targets[0].lastPathComponent : "\(targets.count) photos") to original",
+                 items: targets, name: { $0.lastPathComponent }) { url in
+            let old = store.load(for: url)
+            try store.save(EditRecipe(), for: url)
+            return [.restoreRecipe(url, old)]
         }
     }
 

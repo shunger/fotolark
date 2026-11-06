@@ -197,6 +197,10 @@ enum FileMenu {
         menu.addItem(ActionItem("Compare", enabled: model.canCompare) { model.compareSelection() })
         menu.addItem(.separator())
         menu.addItem(ActionItem("Copy Edits", enabled: model.editsToCopy != nil) { model.copyEdits() })
+        menu.addItem(ActionItem(count == 1 ? "Revert to Original" : "Revert \(count) Photos to Original",
+                                enabled: model.targetPhotos.contains { model.recipes[$0] != nil }) {
+            model.revertTargetsToOriginal()
+        })
         menu.addItem(ActionItem(count == 1 ? "Paste Edits" : "Paste Edits onto \(count) Photos",
                                 enabled: model.canPasteEdits) { model.pasteEdits() })
         menu.addItem(.separator())

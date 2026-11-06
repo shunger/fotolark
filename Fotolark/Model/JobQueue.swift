@@ -31,6 +31,18 @@ final class JobQueue {
         var fraction: Double { total == 0 ? 1 : Double(done) / Double(total) }
         var canUndo: Bool { (state == .finished || state == .cancelled) && !undoSteps.isEmpty }
 
+        /// True when undoing only puts edits back or files back where they were, so it's
+        /// safe as a plain ⌘Z. Undoing an import or export moves files to the Trash, and
+        /// stays a deliberate choice in the Jobs list.
+        var canQuickUndo: Bool {
+            canUndo && undoSteps.allSatisfy {
+                switch $0 {
+                case .restoreRecipe, .moveBack: true
+                case .removeCreatedFile, .restoreFile: false
+                }
+            }
+        }
+
         var statusText: String {
             switch state {
             case .running: isPaused ? "Paused · \(done) of \(total)" : "\(done) of \(total)"

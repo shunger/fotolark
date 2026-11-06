@@ -68,7 +68,9 @@ final class PhotoEditor {
     private var isRendering = false
     private var needsRender = false
 
-    init(url: URL, engine: EditEngine, store: RecipeStore) throws {
+    /// `previous` is this photo's history from earlier in the session; it's picked up
+    /// again when the saved edits still match where it left off.
+    init(url: URL, engine: EditEngine, store: RecipeStore, previous: EditHistory? = nil) throws {
         self.url = url
         self.engine = engine
         self.store = store
@@ -76,7 +78,11 @@ final class PhotoEditor {
         let record = store.loadRecord(for: url)
         let saved = record.recipe
         versions = record.versions
-        history = EditHistory(initial: saved, label: saved.isEmpty ? "Original" : "Saved edits")
+        if let previous, previous.current == saved {
+            history = previous
+        } else {
+            history = EditHistory(initial: saved, label: saved.isEmpty ? "Original" : "Saved edits")
+        }
         recipe = saved
         loadPreview()
     }

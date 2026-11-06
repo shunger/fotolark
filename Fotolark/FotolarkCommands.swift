@@ -49,8 +49,10 @@ struct FotolarkCommands: Commands {
             Button("Save Over Original…") { model.isConfirmingOverwrite = true }
                 .disabled(!canSaveOver)
             Divider()
-            Button("Revert to Original") { editor?.revertToOriginal() }
-                .disabled(!(editor?.isEdited ?? false))
+            Button(editor == nil && model.targetPhotos.count > 1 ? "Revert Selected Photos to Original" : "Revert to Original") {
+                model.revertTargetsToOriginal()
+            }
+            .disabled(editor.map { !$0.isEdited } ?? !model.targetPhotos.contains { model.recipes[$0] != nil })
             Button("Show Backups in Finder") { model.showBackupsInFinder() }
             Divider()
             Button("Show in Finder") { model.revealInFinder() }
@@ -75,9 +77,16 @@ struct FotolarkCommands: Commands {
         }
 
         CommandGroup(replacing: .undoRedo) {
-            Button(editor?.history.undoLabel.map { "Undo \($0)" } ?? "Undo") { editor?.undo() }
-                .keyboardShortcut("z")
-                .disabled(!(editor?.history.canUndo ?? false))
+            // In the editor: the photo's own history. In the grid: the latest bulk job.
+            if let editor {
+                Button(editor.history.undoLabel.map { "Undo \($0)" } ?? "Undo") { editor.undo() }
+                    .keyboardShortcut("z")
+                    .disabled(!editor.history.canUndo)
+            } else {
+                Button(model.undoableJob.map { "Undo \($0.title)" } ?? "Undo") { model.undoLatestJob() }
+                    .keyboardShortcut("z")
+                    .disabled(model.undoableJob == nil || model.sheet != nil)
+            }
             Button(editor?.history.redoLabel.map { "Redo \($0)" } ?? "Redo") { editor?.redo() }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(!(editor?.history.canRedo ?? false))
