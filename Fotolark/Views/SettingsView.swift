@@ -37,6 +37,19 @@ private struct GeneralSettings: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Toggle("Neutral gray background while editing", isOn: $neutralGray)
+
+            Section("Your edit presets") {
+                if model.editPresets.isEmpty {
+                    Text("Save one from the Effects section while editing.").foregroundStyle(.secondary)
+                }
+                ForEach(model.editPresets) { preset in
+                    HStack {
+                        Text(preset.name)
+                        Spacer()
+                        Button("Delete") { model.deleteEditPreset(preset.id) }
+                    }
+                }
+            }
         }
     }
 }

@@ -31,6 +31,8 @@ public enum RecipeRenderer {
                               green: { c.rgb.value(at: c.green.value(at: $0)) },
                               blue: { c.rgb.value(at: c.blue.value(at: $0)) }, to: image)
         case .colorRanges(let r): applyColorRanges(r, to: image)
+        case .looks(let l): applyLooks(l, to: image)
+        case .text(let t): applyText(t, to: image)
         case .orient(let o): applyOrientation(o, to: image)
         case .straighten(let degrees): applyStraighten(degrees, to: image)
         case .crop(let rect): applyCrop(rect, to: image)
@@ -109,17 +111,9 @@ public enum RecipeRenderer {
             let blurred = out.clampedToExtent()
                 .applyingGaussianBlur(sigma: max(2, longest * 0.004) * (0.5 + a.colorNoiseReduction * 1.5))
                 .cropped(to: image.extent)
-            func luminance(_ img: CIImage, sign: CGFloat) -> CIImage {
-                let w = CIVector(x: 0.2126 * sign, y: 0.7152 * sign, z: 0.0722 * sign, w: 0)
-                return img.applyingFilter("CIColorMatrix", parameters: [
-                    "inputRVector": w, "inputGVector": w, "inputBVector": w,
-                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                ])
-            }
-            let colorOnly = luminance(out, sign: 1)
-                .applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: blurred])
-                .applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: luminance(blurred, sign: -1)])
-                .cropped(to: image.extent)
+            let colorOnly = ImageMath.weightedSum([
+                (blurred, 1), (ImageMath.luminance(out), 1), (ImageMath.luminance(blurred), -1),
+            ], extent: image.extent)
             out = out.applyingFilter("CIDissolveTransition", parameters: [
                 kCIInputTargetImageKey: colorOnly, kCIInputTimeKey: min(a.colorNoiseReduction, 1),
             ]).cropped(to: image.extent)

@@ -16,12 +16,23 @@ struct ExportSheet: View {
     @AppStorage("export.metadata") private var metadata: MetadataPolicy = .keepAll
     /// 0 = full size.
     @AppStorage("export.longestSide") private var longestSide = 0
+    @AppStorage("export.watermarkOn") private var watermarkOn = false
+    @AppStorage("export.watermark") private var watermarkData = Data()
     @State private var newPresetName = ""
     @State private var isNaming = false
 
     private var options: ExportOptions {
         ExportOptions(format: format, quality: quality, colorSpace: colorSpace, metadata: metadata,
-                      maxLongestSide: longestSide > 0 ? longestSide : nil)
+                      maxLongestSide: longestSide > 0 ? longestSide : nil, watermark: watermarkOn ? watermark : nil)
+    }
+
+    private var watermark: Watermark {
+        get { (try? JSONDecoder().decode(Watermark.self, from: watermarkData)) ?? Watermark() }
+        nonmutating set { watermarkData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
+
+    private func watermarkBinding<T>(_ key: WritableKeyPath<Watermark, T>) -> Binding<T> {
+        Binding(get: { watermark[keyPath: key] }, set: { var w = watermark; w[keyPath: key] = $0; watermark = w })
     }
 
     var body: some View {
@@ -59,6 +70,29 @@ struct ExportSheet: View {
                 Picker("Photo details", selection: $metadata) {
                     ForEach(MetadataPolicy.allCases) { Text($0.displayName).tag($0) }
                 }
+                Toggle("Add a watermark", isOn: $watermarkOn)
+                if watermarkOn {
+                    if let logo = watermark.logoPath {
+                        LabeledContent("Logo") {
+                            HStack {
+                                Text(URL(fileURLWithPath: logo).lastPathComponent).lineLimit(1)
+                                Button("Use Text Instead") { watermarkBinding(\.logoPath).wrappedValue = nil }
+                            }
+                        }
+                    } else {
+                        LabeledContent("Text") {
+                            HStack {
+                                TextField("© Your Name", text: watermarkBinding(\.text))
+                                Button("Use a Logo…") { chooseLogo() }
+                            }
+                        }
+                    }
+                    Picker("Position", selection: watermarkBinding(\.position)) {
+                        ForEach(Watermark.Position.allCases) { Text($0.title).tag($0) }
+                    }
+                    LabeledContent("Size") { Slider(value: watermarkBinding(\.size), in: 0.02...0.25).accessibilityLabel("Watermark size") }
+                    LabeledContent("Opacity") { Slider(value: watermarkBinding(\.opacity), in: 0.1...1).accessibilityLabel("Watermark opacity") }
+                }
             }
             .formStyle(.columns)
 
@@ -86,6 +120,14 @@ struct ExportSheet: View {
         }
         .padding(20)
         .frame(width: 470)
+    }
+
+    private func chooseLogo() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff]
+        panel.message = "Choose a logo. A PNG with a transparent background works best."
+        guard panel.runModal() == .OK, let url = panel.url, let path = model.importLogo(from: url) else { return }
+        watermarkBinding(\.logoPath).wrappedValue = path
     }
 
     private var sizeLabel: String {

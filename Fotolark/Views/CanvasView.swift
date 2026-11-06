@@ -101,6 +101,10 @@ struct CanvasView: View {
                 GridOverlay(divisions: 8)
             case .retouch:
                 RetouchOverlay(editor: editor)
+            case .focus:
+                FocusOverlay(editor: editor)
+            case .text:
+                TextOverlayEditor(editor: editor)
             case .redEye:
                 GeometryReader { geo in
                     let longest = max(geo.size.width, geo.size.height)

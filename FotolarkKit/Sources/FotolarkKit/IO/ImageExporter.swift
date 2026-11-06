@@ -91,9 +91,12 @@ public struct ExportOptions: Codable, Equatable, Sendable {
     public var metadata: MetadataPolicy
     /// Shrinks the photo so its longest side is at most this many pixels (never enlarges).
     public var maxLongestSide: Int?
+    /// Added to every exported copy.
+    public var watermark: Watermark?
 
     public init(format: ExportFormat = .jpeg, quality: Double = 0.9, colorSpace: ExportColorSpace = .sRGB,
-                metadata: MetadataPolicy = .keepAll, maxLongestSide: Int? = nil) {
+                metadata: MetadataPolicy = .keepAll, maxLongestSide: Int? = nil, watermark: Watermark? = nil) {
+        self.watermark = watermark
         self.format = format
         self.quality = quality
         self.colorSpace = colorSpace
@@ -108,6 +111,7 @@ public struct ExportOptions: Codable, Equatable, Sendable {
         colorSpace = try c.decodeIfPresent(ExportColorSpace.self, forKey: .colorSpace) ?? .sRGB
         metadata = try c.decodeIfPresent(MetadataPolicy.self, forKey: .metadata) ?? .keepAll
         maxLongestSide = try c.decodeIfPresent(Int.self, forKey: .maxLongestSide)
+        watermark = try c.decodeIfPresent(Watermark.self, forKey: .watermark)
     }
 }
 
@@ -159,6 +163,9 @@ public enum ImageExporter {
             if fitted != size {
                 image = RecipeRenderer.apply(.resize(ResizeSpec(width: fitted.width, height: fitted.height)), to: image)
             }
+        }
+        if let watermark = options.watermark {
+            image = RecipeRenderer.applyWatermark(watermark, to: image)
         }
         guard let cg = engine.makeCGImage(image, colorSpace: options.colorSpace.cgColorSpace) else {
             throw FotolarkError.cannotEncode(options.format.displayName)

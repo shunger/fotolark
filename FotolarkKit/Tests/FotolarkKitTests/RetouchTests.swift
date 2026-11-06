@@ -38,7 +38,11 @@ struct RetouchTests {
         let before = difference(photo, clean, around: (150, 100), r: 4)
         let after = difference(healed, clean, around: (150, 100), r: 4)
         #expect(before > 100)
-        #expect(after < 12, "healed area matches clean skin within \(after) levels")
+        #expect(after < 6, "healed area matches clean skin within \(after) levels")
+        // A plain copy from the source spot would carry that spot's (different) shading.
+        let cloned = RecipeRenderer.apply(EditRecipe().setting(.retouch([RetouchStroke(tool: .clone, points: [CurvePoint(0.5, 0.5)],
+                                                                                          radius: radius, sourceOffset: CurvePoint(0.25, 0))])), to: photo)
+        #expect(difference(cloned, clean, around: (150, 100), r: 4) > after + 3, "healing matches light better than cloning")
         // Far away is untouched.
         #expect(difference(healed, photo, around: (40, 40), r: 3) <= 1)
     }

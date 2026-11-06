@@ -13,7 +13,7 @@ struct SendableImage: @unchecked Sendable {
 /// and saves the recipe to the sidecar file.
 @MainActor @Observable
 final class PhotoEditor {
-    enum Tool { case none, crop, straighten, whiteBalance, redEye, retouch }
+    enum Tool { case none, crop, straighten, whiteBalance, redEye, retouch, focus, text }
 
     /// Longest side of the copy used while editing; full resolution is loaded only for
     /// close-up zoom and export.
@@ -84,7 +84,8 @@ final class PhotoEditor {
     var shownRecipe: EditRecipe {
         if showOriginal { return EditRecipe() }
         var r = recipe.withoutResize
-        if tool == .crop { r = r.removing(.crop) }
+        // Captions sit on the cropped photo, so they're hidden while the crop changes.
+        if tool == .crop { r = r.removing(.crop).removing(.text) }
         return r
     }
 
@@ -364,6 +365,92 @@ final class PhotoEditor {
         apply(recipe.setting(.retouch(strokes)), label: "Remove stroke")
     }
 
+    // MARK: Looks
+
+    /// Small previews of each look on this photo, for the Effects panel.
+    private(set) var lookPreviews: [Look.Kind: CGImage] = [:]
+    private var lookPreviewTask: Task<Void, Never>?
+
+    func refreshLookPreviews() {
+        guard let proxy else { return }
+        lookPreviewTask?.cancel()
+        let base = recipe.removing(.looks).withoutResize
+        let engine = engine
+        lookPreviewTask = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            let previews = await Task.detached(priority: .utility) { () -> [Look.Kind: CGImage] in
+                let s = 140 / max(proxy.image.extent.width, proxy.image.extent.height)
+                let small = proxy.image.transformed(by: CGAffineTransform(scaleX: s, y: s)).normalizedForPreview()
+                let edited = RecipeRenderer.apply(base, to: small, includeResize: false)
+                var out: [Look.Kind: CGImage] = [:]
+                for kind in Look.Kind.allCases {
+                    if let cg = engine.makeCGImage(RecipeRenderer.apply(.looks([Look(kind: kind)]), to: edited)) { out[kind] = cg }
+                }
+                return out
+            }.value
+            guard !Task.isCancelled else { return }
+            lookPreviews = previews
+        }
+    }
+
+    func addLook(_ kind: Look.Kind) {
+        apply(recipe.setting(.looks(recipe.looks + [Look(kind: kind)])), label: kind.title)
+        if kind == .focalBW {
+            tool = .focus
+            toolMessage = "Click the part of the photo to keep in color."
+        }
+    }
+
+    func updateLook(_ look: Look, live: Bool = true) {
+        let looks = recipe.looks.map { $0.id == look.id ? look : $0 }
+        if live { setLive(recipe.setting(.looks(looks)), label: look.kind.title) } else { apply(recipe.setting(.looks(looks)), label: look.kind.title) }
+    }
+
+    func removeLook(_ look: Look) {
+        apply(recipe.setting(.looks(recipe.looks.filter { $0.id != look.id })), label: "Remove \(look.kind.title.lowercased())")
+    }
+
+    /// Sets the focus point of the (last) focal B&W look from a click.
+    func setFocus(atDisplayPoint p: CGPoint) {
+        guard var look = recipe.looks.last(where: { $0.kind == .focalBW }) else { return }
+        let s = PointMapping.sourcePoint(fromDisplay: p, recipe: shownRecipe, sourceSize: info.pixelSize)
+        look.focusX = s.x
+        look.focusY = s.y
+        updateLook(look, live: false)
+    }
+
+    var focusDisplay: (point: CGPoint, radius: Double)? {
+        guard let look = recipe.looks.last(where: { $0.kind == .focalBW }),
+              let p = PointMapping.displayPoint(fromSource: CGPoint(x: look.focusX, y: look.focusY), recipe: shownRecipe,
+                                                sourceSize: info.pixelSize) else { return nil }
+        let r = look.focusRadius * Double(max(info.pixelSize.width, info.pixelSize.height)) / Double(max(shownSize.width, shownSize.height))
+        return (p, r)
+    }
+
+    // MARK: Text
+
+    var selectedTextID: UUID?
+
+    var textOverlays: [TextOverlay] { recipe.textOverlays }
+
+    func addText(atDisplayPoint p: CGPoint) {
+        let overlay = TextOverlay(text: "Your text", x: p.x, y: p.y)
+        selectedTextID = overlay.id
+        apply(recipe.setting(.text(textOverlays + [overlay])), label: "Add text")
+    }
+
+    func updateText(_ overlay: TextOverlay, live: Bool = true) {
+        let list = textOverlays.map { $0.id == overlay.id ? overlay : $0 }
+        if live { setLive(recipe.setting(.text(list)), label: "Text") } else { apply(recipe.setting(.text(list)), label: "Text") }
+    }
+
+    func deleteSelectedText() {
+        guard let id = selectedTextID else { return }
+        selectedTextID = nil
+        apply(recipe.setting(.text(textOverlays.filter { $0.id != id })), label: "Delete text")
+    }
+
     // MARK: Red eye
 
     /// Opens the red-eye tool and fixes any red eyes Vision can find.
@@ -515,6 +602,7 @@ final class PhotoEditor {
                 }.value
                 proxy = image
                 scheduleRender()
+                refreshLookPreviews()
             } catch {
                 AppModel.shared.errorMessage = error.localizedDescription
             }
@@ -566,6 +654,7 @@ final class PhotoEditor {
     // MARK: Saving
 
     private func scheduleSave() {
+        refreshLookPreviews()
         saveTask?.cancel()
         let recipe = history.current
         let url = url
@@ -637,5 +726,12 @@ enum CropAspect: String, CaseIterable, Identifiable {
         case .r8x10: 10.0 / 8
         case .custom: customHeight > 0 && customWidth > 0 ? customWidth / customHeight : nil
         }
+    }
+}
+
+extension CIImage {
+    /// Moves the image so it starts at (0, 0), as the editing engine expects.
+    func normalizedForPreview() -> CIImage {
+        transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
     }
 }

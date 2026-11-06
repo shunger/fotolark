@@ -101,7 +101,7 @@ extension EditRecipe {
     /// Edits that copy and paste between photos: tone and color. Turns, straightening,
     /// crop and size belong to each photo and are left alone.
     public static let pastableKinds: [EditOperation.Kind] = [.magicFix, .autoContrast, .autoColor, .whiteBalance, .adjust,
-                                                             .levels, .curves, .colorRanges]
+                                                             .levels, .curves, .colorRanges, .looks]
 
     /// Just the edits that can be pasted onto other photos.
     public var pastableEdits: EditRecipe {

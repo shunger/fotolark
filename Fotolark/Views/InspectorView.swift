@@ -15,6 +15,14 @@ struct InspectorView: View {
                 case .whiteBalance: WhiteBalancePanel(editor: editor)
                 case .redEye: RedEyePanel(editor: editor)
                 case .retouch: RetouchPanel(editor: editor)
+                case .text: TextPanel(editor: editor)
+                case .focus:
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Focal B&W").font(.headline)
+                        Text("Click the part of the photo to keep in color. The rest turns black and white.")
+                            .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        Button("Done") { editor.tool = .none }.keyboardShortcut(.defaultAction).controlSize(.large)
+                    }
                 case .none: mainPanels
                 }
             }
@@ -73,6 +81,12 @@ struct InspectorView: View {
                     ToolButton(title: "Rotate right", systemImage: "rotate.right") { editor.rotate(clockwise: true) }
                 }
                 GridRow {
+                    ToolButton(title: "Text", systemImage: "textformat") { editor.tool = .text; model.zoomToFit() }
+                    ToolButton(title: "Flip vertical", systemImage: "arrow.up.and.down.righttriangle.up.righttriangle.down") {
+                        editor.flip(horizontally: false)
+                    }
+                }
+                GridRow {
                     ToolButton(title: "Flip", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
                         editor.flip(horizontally: true)
                     }
@@ -82,6 +96,10 @@ struct InspectorView: View {
             LabeledContent("Size", value: sizeText)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+        }
+
+        InspectorSection("Effects") {
+            EffectsControls(editor: editor, model: model)
         }
 
         InspectorSection("Light") {

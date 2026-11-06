@@ -416,6 +416,32 @@ final class AppModel {
     // MARK: Export and share
 
     private(set) var customPresets: [ExportPreset] = []
+
+    /// Saved combinations of tone, color and looks.
+    private(set) var editPresets: [EditPreset] = {
+        guard let data = UserDefaults.standard.data(forKey: "edit.presets") else { return [] }
+        return (try? JSONDecoder().decode([EditPreset].self, from: data)) ?? []
+    }()
+
+    func saveEditPreset(_ preset: EditPreset) {
+        editPresets.append(preset)
+        UserDefaults.standard.set(try? JSONEncoder().encode(editPresets), forKey: "edit.presets")
+    }
+
+    func deleteEditPreset(_ id: EditPreset.ID) {
+        editPresets.removeAll { $0.id == id }
+        UserDefaults.standard.set(try? JSONEncoder().encode(editPresets), forKey: "edit.presets")
+    }
+
+    /// Copies a logo into Fotolark's own storage so watermarks keep working if the
+    /// original file moves.
+    func importLogo(from url: URL) -> String? {
+        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Fotolark/Logos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let target = folder.appendingPathComponent(UUID().uuidString).appendingPathExtension(url.pathExtension)
+        return (try? FileManager.default.copyItem(at: url, to: target)) != nil ? target.path : nil
+    }
     var exportPresets: [ExportPreset] { ExportPreset.builtIn + customPresets }
 
     func saveExportPreset(_ preset: ExportPreset) {

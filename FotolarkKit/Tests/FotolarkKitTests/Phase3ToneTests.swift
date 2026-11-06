@@ -96,8 +96,13 @@ struct Phase3ToneTests {
         a.colorNoiseReduction = 1
         func chroma(_ p: [UInt8]) -> Double { Double(p[0]) - Double(p[2]) }
         let before = spread(readGrid(noisy()), channel: chroma)
-        let after = spread(readGrid(RecipeRenderer.apply(EditRecipe().settingAdjustments(a), to: noisy())), channel: chroma)
+        let out = readGrid(RecipeRenderer.apply(EditRecipe().settingAdjustments(a), to: noisy()))
+        let after = spread(out, channel: chroma)
         #expect(after < before * 0.6, "\(before) → \(after)")
+        // Brightness detail is kept: only color is smoothed.
+        func luma(_ p: [UInt8]) -> Double { 0.2126 * Double(p[0]) + 0.7152 * Double(p[1]) + 0.0722 * Double(p[2]) }
+        let lumaBefore = spread(readGrid(noisy()), channel: luma), lumaAfter = spread(out, channel: luma)
+        #expect(lumaAfter > lumaBefore * 0.8, "brightness grain kept: \(lumaBefore) → \(lumaAfter)")
     }
 
     @Test func newOperationsRoundTripAndPaste() throws {

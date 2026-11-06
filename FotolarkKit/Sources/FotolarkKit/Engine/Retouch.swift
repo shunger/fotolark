@@ -67,9 +67,8 @@ extension RecipeRenderer {
                 ])
                 let lowTarget = covered.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: e)
                 let lowPatch = patch.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: e)
-                // patch − low(patch) + low(target). Only `patch` keeps its opacity, so the
-                // sum stays fully opaque.
-                replacement = add(withoutAlpha(lowTarget), add(patch, negate(lowPatch))).cropped(to: e)
+                // patch − low(patch) + low(target)
+                replacement = ImageMath.weightedSum([(patch, 1), (lowPatch, -1), (lowTarget, 1)], extent: e)
             }
         case .soften:
             // A smooth copy with a little of the original texture kept, so skin doesn't look plastic.
@@ -121,22 +120,6 @@ extension RecipeRenderer {
             mask = mask.map { dab.applyingFilter("CILightenBlendMode", parameters: [kCIInputBackgroundImageKey: $0]) } ?? dab
         }
         return mask?.cropped(to: e)
-    }
-
-    private static func negate(_ img: CIImage) -> CIImage {
-        img.applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: -1, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: -1, z: 0, w: 0),
-            "inputBVector": CIVector(x: 0, y: 0, z: -1, w: 0), "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-        ])
-    }
-
-    private static func withoutAlpha(_ img: CIImage) -> CIImage {
-        img.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0)])
-    }
-
-    /// Adds two images channel by channel, alpha included.
-    private static func add(_ a: CIImage, _ b: CIImage) -> CIImage {
-        a.applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: b])
     }
 }
 

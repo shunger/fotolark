@@ -23,6 +23,8 @@ public enum EditOperation: Equatable, Sendable {
     case curves(Curves)
     /// Hue, saturation and lightness per color range.
     case colorRanges(ColorRanges)
+    /// One-click looks, stacked in order.
+    case looks([Look])
     /// 90° turns and flips.
     case orient(Orientation)
     /// Straighten by an angle in degrees (positive = clockwise). The result is cropped to
@@ -30,12 +32,14 @@ public enum EditOperation: Equatable, Sendable {
     case straighten(degrees: Double)
     /// Crop, in normalized coordinates of the image coming into this step.
     case crop(CropRect)
+    /// Captions placed on the cropped photo.
+    case text([TextOverlay])
     /// Final output size in pixels. Applied on export, not in the on-screen preview.
     case resize(ResizeSpec)
 
     /// The kind of an operation; a recipe holds at most one operation of each kind.
     public enum Kind: String, Codable, CaseIterable, Sendable, Comparable {
-        case magicFix, autoContrast, autoColor, whiteBalance, redEye, retouch, adjust, levels, curves, colorRanges, orient, straighten, crop, resize
+        case magicFix, autoContrast, autoColor, whiteBalance, redEye, retouch, adjust, levels, curves, colorRanges, looks, orient, straighten, crop, text, resize
 
         /// Canonical position in a recipe: tone and color first, then geometry, then size.
         var order: Int { Kind.allCases.firstIndex(of: self)! }
@@ -62,6 +66,8 @@ public enum EditOperation: Equatable, Sendable {
         case .levels: .levels
         case .curves: .curves
         case .colorRanges: .colorRanges
+        case .looks: .looks
+        case .text: .text
         case .orient: .orient
         case .straighten: .straighten
         case .crop: .crop
@@ -82,6 +88,8 @@ public enum EditOperation: Equatable, Sendable {
         case .levels(let l): l.isIdentity
         case .curves(let c): c.isIdentity
         case .colorRanges(let r): r.isIdentity
+        case .looks(let l): l.isEmpty
+        case .text(let t): t.isEmpty
         case .orient(let orientation): orientation == .identity
         case .straighten(let degrees): degrees == 0
         case .crop(let rect): rect == .full
@@ -111,6 +119,8 @@ extension EditOperation: Codable {
         case .levels: self = .levels(try c.decode(ToneLevels.self, forKey: .value))
         case .curves: self = .curves(try c.decode(Curves.self, forKey: .value))
         case .colorRanges: self = .colorRanges(try c.decode(ColorRanges.self, forKey: .value))
+        case .looks: self = .looks(try c.decode([Look].self, forKey: .value))
+        case .text: self = .text(try c.decode([TextOverlay].self, forKey: .value))
         case .orient: self = .orient(try c.decode(Orientation.self, forKey: .value))
         case .straighten: self = .straighten(degrees: try c.decode(Double.self, forKey: .value))
         case .crop: self = .crop(try c.decode(CropRect.self, forKey: .value))
@@ -132,6 +142,8 @@ extension EditOperation: Codable {
         case .levels(let v): try c.encode(v, forKey: .value)
         case .curves(let v): try c.encode(v, forKey: .value)
         case .colorRanges(let v): try c.encode(v, forKey: .value)
+        case .looks(let v): try c.encode(v, forKey: .value)
+        case .text(let v): try c.encode(v, forKey: .value)
         case .orient(let v): try c.encode(v, forKey: .value)
         case .straighten(let v): try c.encode(v, forKey: .value)
         case .crop(let v): try c.encode(v, forKey: .value)
