@@ -38,6 +38,7 @@ struct ShortcutsView: View {
             ("⌥⌘H", "Retouch (spot heal, clone, soften skin)"),
             ("⌥⌘G", "Brush and gradient adjustments (hold ⌥ to erase)"),
             ("⌥⌘X", "Add text"),
+            ("⌥⌘A", "Shapes and arrows (Delete removes the selected one)"),
             ("⌘[ and ⌘]", "Rotate left or right"),
             ("⌥⌘R", "Resize"),
             ("⌘Z, ⇧⌘Z", "Undo, redo"),

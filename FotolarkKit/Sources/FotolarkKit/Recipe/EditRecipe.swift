@@ -65,6 +65,16 @@ public struct EditRecipe: Codable, Equatable, Sendable {
         return nil
     }
 
+    public var markup: [MarkupShape] {
+        if case .markup(let m) = operation(.markup) { return m }
+        return []
+    }
+
+    public var border: Border? {
+        if case .border(let b) = operation(.border) { return b }
+        return nil
+    }
+
     public var resize: ResizeSpec? {
         if case .resize(let r) = operation(.resize) { return r }
         return nil

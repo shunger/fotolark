@@ -114,6 +114,8 @@ struct CanvasView: View {
                 LocalOverlay(editor: editor)
             case .tiltShift:
                 TiltShiftOverlay(editor: editor)
+            case .markup:
+                MarkupOverlay(editor: editor)
             case .text:
                 TextOverlayEditor(editor: editor)
             case .redEye:

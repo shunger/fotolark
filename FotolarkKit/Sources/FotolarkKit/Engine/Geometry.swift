@@ -60,6 +60,8 @@ public enum Geometry {
             case .crop(let rect):
                 let r = cropPixelRect(rect, in: size)
                 size = PixelSize(width: r.width, height: r.height)
+            case .border(let b):
+                size = b.outputSize(for: size)
             case .resize(let spec):
                 if includeResize { size = PixelSize(width: spec.width, height: spec.height) }
             default:

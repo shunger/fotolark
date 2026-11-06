@@ -13,7 +13,7 @@ struct SendableImage: @unchecked Sendable {
 /// and saves the recipe to the sidecar file.
 @MainActor @Observable
 final class PhotoEditor {
-    enum Tool { case none, crop, straighten, whiteBalance, redEye, retouch, focus, text, local, tiltShift }
+    enum Tool { case none, crop, straighten, whiteBalance, redEye, retouch, focus, text, local, tiltShift, markup }
 
     /// Longest side of the copy used while editing; full resolution is loaded only for
     /// close-up zoom and export.
@@ -73,7 +73,9 @@ final class PhotoEditor {
         self.engine = engine
         self.store = store
         info = try ImageLoader.info(for: url)
-        let saved = store.load(for: url) ?? EditRecipe()
+        let record = store.loadRecord(for: url)
+        let saved = record.recipe
+        versions = record.versions
         history = EditHistory(initial: saved, label: saved.isEmpty ? "Original" : "Saved edits")
         recipe = saved
         loadPreview()
@@ -86,8 +88,10 @@ final class PhotoEditor {
     var shownRecipe: EditRecipe {
         if showOriginal { return EditRecipe() }
         var r = recipe.withoutResize
-        // Captions sit on the cropped photo, so they're hidden while the crop changes.
-        if tool == .crop { r = r.removing(.crop).removing(.text) }
+        // Tools work on the photo itself, so a border is hidden while one is open.
+        if tool != .none { r = r.removing(.border) }
+        // Captions and shapes sit on the cropped photo, so they're hidden while the crop changes.
+        if tool == .crop { r = r.removing(.crop).removing(.text).removing(.markup) }
         return r
     }
 
@@ -280,6 +284,21 @@ final class PhotoEditor {
                 toolMessage = "The subject already fills the photo, so there's nothing to crop."
             }
         }
+    }
+
+    // MARK: Versions and markup
+
+    /// Named versions of this photo's edits.
+    private(set) var versions: [EditVersion] = []
+    var markupKind = MarkupShape.Kind.arrow
+    var markupColor = RGBAColor(red: 0.95, green: 0.15, blue: 0.1)
+    var markupWidth = 0.006
+    var selectedShapeID: UUID?
+
+    func setVersions(_ list: [EditVersion]) {
+        versions = list
+        let store = store, url = url
+        Task.detached(priority: .userInitiated) { _ = try? store.update(url) { $0.versions = list } }
     }
 
     // MARK: Brush and gradient adjustments

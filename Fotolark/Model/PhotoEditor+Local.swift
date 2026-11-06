@@ -180,6 +180,80 @@ extension PhotoEditor {
         setLive(recipe.setting(.backgroundBlur(b)), label: "Background blur")
     }
 
+    // MARK: Border
+
+    func setBorder(_ border: Border?, live: Bool = true) {
+        let r = border.map { recipe.setting(.border($0)) } ?? recipe.removing(.border)
+        if live { setLive(r, label: "Border") } else { apply(r, label: border == nil ? "Remove border" : "Border") }
+    }
+
+    // MARK: Shapes and arrows
+
+    var shapes: [MarkupShape] { recipe.markup }
+
+    var selectedShape: MarkupShape? { shapes.first { $0.id == selectedShapeID } }
+
+    /// Adds a shape dragged out on the shown photo (normalized points).
+    @discardableResult
+    func addShape(from start: CGPoint, to end: CGPoint) -> UUID {
+        let shape = MarkupShape(kind: markupKind, start: CurvePoint(start.x, start.y), end: CurvePoint(end.x, end.y),
+                                color: markupColor, lineWidth: markupWidth)
+        setLive(recipe.setting(.markup(shapes + [shape])), label: "Add \(markupKind.title.lowercased())")
+        selectedShapeID = shape.id
+        return shape.id
+    }
+
+    func updateShape(_ shape: MarkupShape, live: Bool = true, label: String = "Move shape") {
+        var list = shapes
+        guard let i = list.firstIndex(where: { $0.id == shape.id }) else { return }
+        list[i] = shape
+        let r = recipe.setting(.markup(list))
+        if live { setLive(r, label: label) } else { apply(r, label: label) }
+    }
+
+    func deleteSelectedShape() {
+        guard let id = selectedShapeID else { return }
+        let list = shapes.filter { $0.id != id }
+        apply(list.isEmpty ? recipe.removing(.markup) : recipe.setting(.markup(list)), label: "Delete shape")
+        selectedShapeID = list.last?.id
+    }
+
+    /// The new style applies to the selected shape too.
+    func setMarkupStyle(color: RGBAColor? = nil, width: Double? = nil) {
+        if let color { markupColor = color }
+        if let width { markupWidth = width }
+        if var s = selectedShape {
+            s.color = markupColor
+            s.lineWidth = markupWidth
+            updateShape(s, label: "Shape style")
+        }
+    }
+
+    // MARK: Versions
+
+    func saveVersion(named name: String) {
+        commitPending()
+        let clean = name.trimmingCharacters(in: .whitespaces)
+        let version = EditVersion(name: clean.isEmpty ? "Version \(versions.count + 1)" : clean, recipe: history.current)
+        setVersions(versions + [version])
+    }
+
+    func useVersion(_ id: UUID) {
+        guard let v = versions.first(where: { $0.id == id }) else { return }
+        tool = .none
+        apply(v.recipe, label: "Use “\(v.name)”")
+    }
+
+    func renameVersion(_ id: UUID, to name: String) {
+        let clean = name.trimmingCharacters(in: .whitespaces)
+        guard !clean.isEmpty else { return }
+        setVersions(versions.map { var v = $0; if v.id == id { v.name = clean }; return v })
+    }
+
+    func deleteVersion(_ id: UUID) {
+        setVersions(versions.filter { $0.id != id })
+    }
+
     // MARK: Lens
 
     func setLens(_ lens: LensCorrection) {

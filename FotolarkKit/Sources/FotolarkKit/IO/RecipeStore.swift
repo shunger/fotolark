@@ -9,13 +9,15 @@ public struct SidecarFile: Codable, Equatable, Sendable {
     public var photos: [String: EditRecipe] = [:]
     /// Ratings, flags and tags (left out of the file when there are none).
     public var labels: [String: PhotoLabels] = [:]
+    /// Named versions of each photo's edits (left out when there are none).
+    public var versions: [String: [EditVersion]] = [:]
 
     public init(photos: [String: EditRecipe] = [:], labels: [String: PhotoLabels] = [:]) {
         self.photos = photos
         self.labels = labels
     }
 
-    enum CodingKeys: String, CodingKey { case format, version, photos, labels }
+    enum CodingKeys: String, CodingKey { case format, version, photos, labels, versions }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -23,6 +25,7 @@ public struct SidecarFile: Codable, Equatable, Sendable {
         version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
         photos = try c.decodeIfPresent([String: EditRecipe].self, forKey: .photos) ?? [:]
         labels = try c.decodeIfPresent([String: PhotoLabels].self, forKey: .labels) ?? [:]
+        versions = try c.decodeIfPresent([String: [EditVersion]].self, forKey: .versions) ?? [:]
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -31,17 +34,19 @@ public struct SidecarFile: Codable, Equatable, Sendable {
         try c.encode(version, forKey: .version)
         try c.encode(photos, forKey: .photos)
         if !labels.isEmpty { try c.encode(labels, forKey: .labels) }
+        if !versions.isEmpty { try c.encode(versions, forKey: .versions) }
     }
 
-    var isEmpty: Bool { photos.isEmpty && labels.isEmpty }
+    var isEmpty: Bool { photos.isEmpty && labels.isEmpty && versions.isEmpty }
 
     func record(named name: String) -> PhotoRecord {
-        PhotoRecord(recipe: photos[name] ?? EditRecipe(), labels: labels[name] ?? PhotoLabels())
+        PhotoRecord(recipe: photos[name] ?? EditRecipe(), labels: labels[name] ?? PhotoLabels(), versions: versions[name] ?? [])
     }
 
     mutating func set(_ record: PhotoRecord, named name: String) {
         photos[name] = record.recipe.isEmpty ? nil : record.recipe
         labels[name] = record.labels.isEmpty ? nil : record.labels
+        versions[name] = record.versions.isEmpty ? nil : record.versions
     }
 }
 
@@ -214,7 +219,8 @@ public final class RecipeStore: @unchecked Sendable {
             return .removed
         }
         try FileManager.default.createDirectory(at: fallbackDirectory, withIntermediateDirectories: true)
-        let entry = FallbackEntry(path: photo.path, recipe: record.recipe, labels: record.labels)
+        let entry = FallbackEntry(path: photo.path, recipe: record.recipe, labels: record.labels,
+                                  versions: record.versions.isEmpty ? nil : record.versions)
         try Self.encoder.encode(entry).write(to: url, options: .atomic)
         return .appStorage(url)
     }
@@ -222,7 +228,7 @@ public final class RecipeStore: @unchecked Sendable {
     private func fallbackRecord(for photo: URL) -> PhotoRecord? {
         guard let data = try? Data(contentsOf: fallbackURL(for: photo)),
               let entry = try? JSONDecoder().decode(FallbackEntry.self, from: data) else { return nil }
-        return PhotoRecord(recipe: entry.recipe, labels: entry.labels ?? PhotoLabels())
+        return PhotoRecord(recipe: entry.recipe, labels: entry.labels ?? PhotoLabels(), versions: entry.versions ?? [])
     }
 
     // MARK: Internals
@@ -231,6 +237,7 @@ public final class RecipeStore: @unchecked Sendable {
         var path: String
         var recipe: EditRecipe
         var labels: PhotoLabels?
+        var versions: [EditVersion]?
     }
 
     static let encoder: JSONEncoder = {

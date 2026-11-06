@@ -125,6 +125,8 @@ struct FotolarkCommands: Commands {
                     .keyboardShortcut("g", modifiers: [.command, .option])
                 Button("Tilt-Shift…") { editor?.beginTiltShift(); model.zoomToFit() }
                 Button("Add Text…") { editor?.tool = .text; model.zoomToFit() }
+                Button("Shapes and Arrows…") { editor?.tool = .markup; model.zoomToFit() }
+                    .keyboardShortcut("a", modifiers: [.command, .option])
                     .keyboardShortcut("x", modifiers: [.command, .option])
                 Button("Rotate Left") { editor?.rotate(clockwise: false) }
                     .keyboardShortcut("[")

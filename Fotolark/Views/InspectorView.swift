@@ -18,6 +18,7 @@ struct InspectorView: View {
                 case .text: TextPanel(editor: editor)
                 case .local: LocalPanel(editor: editor)
                 case .tiltShift: TiltShiftPanel(editor: editor)
+                case .markup: MarkupPanel(editor: editor)
                 case .focus:
                     VStack(alignment: .leading, spacing: 14) {
                         Text("Focal B&W").font(.headline)
@@ -109,6 +110,12 @@ struct InspectorView: View {
                     }
                     ToolButton(title: "Resize…", systemImage: "arrow.up.left.and.arrow.down.right") { model.sheet = .resize }
                 }
+                GridRow {
+                    ToolButton(title: "Shapes", systemImage: "arrow.up.right.square") {
+                        editor.tool = .markup; model.zoomToFit()
+                    }
+                    Color.clear.frame(height: 1)
+                }
             }
             LabeledContent("Size", value: sizeText)
                 .font(.callout)
@@ -150,10 +157,15 @@ struct InspectorView: View {
         DisclosureSection("Color ranges") { ColorRangeControls(editor: editor) }
 
         DisclosureSection("Lens correction") { LensControls(editor: editor) }
+        DisclosureSection("Border") { BorderControls(editor: editor) }
 
         InspectorSection("Vignette") {
             SliderRow(editor: editor, title: "Amount", key: \.vignette)
             SliderRow(editor: editor, title: "Size", key: \.vignetteSize, range: 0...1, format: "%.0f", defaultValue: 0.5)
+        }
+
+        InspectorSection("Versions") {
+            VersionsList(editor: editor)
         }
 
         InspectorSection("History") {

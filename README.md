@@ -36,7 +36,7 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
   3. Slideshow: **built**
   4. Brush and gradient adjustments, tilt-shift, lens correction: **built**
   5. Object removal, background blur, remove background: **built**
-  6. Borders and frames, shapes and arrows, versions
+  6. Borders and frames, shapes and arrows, versions: **built**
   7. Print, contact sheet, collage, PDF
 
 ## Build and test

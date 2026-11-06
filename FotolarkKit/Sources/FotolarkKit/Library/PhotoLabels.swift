@@ -70,13 +70,16 @@ public struct PhotoLabels: Codable, Equatable, Hashable, Sendable {
 public struct PhotoRecord: Equatable, Sendable {
     public var recipe: EditRecipe
     public var labels: PhotoLabels
+    /// Named versions of the edits, oldest first.
+    public var versions: [EditVersion]
 
-    public init(recipe: EditRecipe = EditRecipe(), labels: PhotoLabels = PhotoLabels()) {
+    public init(recipe: EditRecipe = EditRecipe(), labels: PhotoLabels = PhotoLabels(), versions: [EditVersion] = []) {
         self.recipe = recipe
         self.labels = labels
+        self.versions = versions
     }
 
-    public var isEmpty: Bool { recipe.isEmpty && labels.isEmpty }
+    public var isEmpty: Bool { recipe.isEmpty && labels.isEmpty && versions.isEmpty }
 }
 
 /// A change to several photos' ratings, flags or tags at once.

@@ -42,13 +42,17 @@ public enum EditOperation: Equatable, Sendable {
     case crop(CropRect)
     /// Captions placed on the cropped photo.
     case text([TextOverlay])
+    /// Arrows, lines, boxes and highlights on the cropped photo.
+    case markup([MarkupShape])
+    /// A border or frame around the finished photo (makes it bigger).
+    case border(Border)
     /// Final output size in pixels. Applied on export, not in the on-screen preview.
     case resize(ResizeSpec)
 
     /// The kind of an operation; a recipe holds at most one operation of each kind.
     public enum Kind: String, Codable, CaseIterable, Sendable, Comparable {
         case lens, magicFix, autoContrast, autoColor, whiteBalance, redEye, retouch, adjust, levels, curves, colorRanges,
-             local, looks, tiltShift, backgroundBlur, orient, straighten, crop, text, resize
+             local, looks, tiltShift, backgroundBlur, orient, straighten, crop, text, markup, border, resize
 
         /// Canonical position in a recipe: tone and color first, then geometry, then size.
         var order: Int { Kind.allCases.firstIndex(of: self)! }
@@ -69,6 +73,8 @@ public enum EditOperation: Equatable, Sendable {
         case .local: .local
         case .tiltShift: .tiltShift
         case .backgroundBlur: .backgroundBlur
+        case .markup: .markup
+        case .border: .border
         case .magicFix: .magicFix
         case .autoContrast: .autoContrast
         case .autoColor: .autoColor
@@ -95,6 +101,8 @@ public enum EditOperation: Equatable, Sendable {
         case .local(let l): l.isEmpty
         case .tiltShift(let t): t.blur == 0 && t.vivid == 0
         case .backgroundBlur(let b): b.amount == 0
+        case .markup(let m): m.isEmpty
+        case .border(let b): b.width <= 0 && !(b.style == .rounded && b.cornerRadius > 0)
         case .magicFix(let chain): chain.steps.isEmpty
         case .autoContrast(let levels): levels == .identity
         case .autoColor(let gains): gains == .identity
@@ -130,6 +138,8 @@ extension EditOperation: Codable {
         case .local: self = .local(try c.decode([LocalAdjustment].self, forKey: .value))
         case .tiltShift: self = .tiltShift(try c.decode(TiltShift.self, forKey: .value))
         case .backgroundBlur: self = .backgroundBlur(try c.decode(BackgroundBlur.self, forKey: .value))
+        case .markup: self = .markup(try c.decode([MarkupShape].self, forKey: .value))
+        case .border: self = .border(try c.decode(Border.self, forKey: .value))
         case .magicFix: self = .magicFix(try c.decode(FilterChain.self, forKey: .value))
         case .autoContrast: self = .autoContrast(try c.decode(Levels.self, forKey: .value))
         case .autoColor: self = .autoColor(try c.decode(ChannelGains.self, forKey: .value))
@@ -157,6 +167,8 @@ extension EditOperation: Codable {
         case .local(let v): try c.encode(v, forKey: .value)
         case .tiltShift(let v): try c.encode(v, forKey: .value)
         case .backgroundBlur(let v): try c.encode(v, forKey: .value)
+        case .markup(let v): try c.encode(v, forKey: .value)
+        case .border(let v): try c.encode(v, forKey: .value)
         case .magicFix(let v): try c.encode(v, forKey: .value)
         case .autoContrast(let v): try c.encode(v, forKey: .value)
         case .autoColor(let v): try c.encode(v, forKey: .value)
