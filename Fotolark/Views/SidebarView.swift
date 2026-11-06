@@ -138,29 +138,33 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .searchable(text: $model.searchText, placement: .sidebar, prompt: "Search all photos")
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                Button {
-                    model.addFolderWithPanel()
-                } label: {
-                    Label("Add Folder…", systemImage: "plus")
-                }
-                .buttonStyle(.borderless)
-                Spacer()
-                if library.isScanning { ProgressView().controlSize(.small) }
-            }
-            .padding(10)
-            .overlay(alignment: .top) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // A solid footer, so folders scrolling underneath don't show through it.
+            VStack(alignment: .leading, spacing: 6) {
                 if let status = model.indexStatus {
                     Text(status)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .padding(.horizontal, 10)
-                        .offset(y: -14)
-                        .help("Fotolark reads text in photos (signs, documents, screenshots) so search can find it. Turn this off in Settings.")
+                        .truncationMode(.middle)
+                        .help("Fotolark looks at your photos in the background (faces, look-alikes and text in photos) so People and search can find them. Turn this off in Settings.")
+                }
+                HStack {
+                    Button {
+                        model.addFolderWithPanel()
+                    } label: {
+                        Label("Add Folder…", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    Spacer()
+                    if library.isScanning { ProgressView().controlSize(.small) }
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+            .overlay(alignment: .top) { Divider() }
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 230, max: 360)
     }
