@@ -71,6 +71,7 @@ struct ImportView: View {
                 Divider()
                 content
             }
+            .frame(minWidth: 280, maxWidth: .infinity)
             Divider()
             optionsPanel.frame(width: 300)
         }
@@ -85,38 +86,92 @@ struct ImportView: View {
         }
     }
 
+    /// Two rows, so it fits a narrow window: what this is (and Photos' album choice) on
+    /// top, the filters below. Nothing in it may force the window wider.
     private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Title and Photos' album choice side by side, or stacked when narrow.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    titleBlock
+                    Spacer(minLength: 8)
+                    photosControls
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    titleBlock
+                    HStack(spacing: 8) { photosControls }
+                }
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    filterControls
+                    Spacer(minLength: 8)
+                    sizeSlider
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    filterControls
+                    sizeSlider
+                }
+            }
+        }
+        .padding(12)
+        // Never let the header push the window wider than it is.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
+    }
+
+    private var titleBlock: some View {
         HStack(spacing: 12) {
             Image(systemName: source.systemImage).font(.title2).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Import from \(source.title)").font(.headline)
-                Text(summary).font(.callout).foregroundStyle(.secondary)
+                Text("Import from \(source.title)").font(.headline).lineLimit(1)
+                Text(summary).font(.callout).foregroundStyle(.secondary).lineLimit(1)
             }
-            Spacer()
-            if let library = source as? PhotosLibrarySource {
-                Picker("Album", selection: Binding(get: { library.albumID }, set: { library.albumID = $0 })) {
-                    Text("All Photos").tag(String?.none)
-                    ForEach(library.albums) { Text("\($0.title) (\($0.count))").tag(String?.some($0.id)) }
-                }
-                .fixedSize()
-                Button("Edit in Fotolark") {
-                    if let id = selection.first { model.editFromPhotos(id) }
-                }
-                .disabled(selection.count != 1 || selection.first?.hasSuffix(PhotosLibrarySource.liveSuffix) == true)
-                .help("Edit the selected picture, then save it back to Photos. Photos keeps the original.")
+        }
+    }
+
+    @ViewBuilder
+    private var photosControls: some View {
+        if let library = source as? PhotosLibrarySource {
+            Picker("Album", selection: Binding(get: { library.albumID }, set: { library.albumID = $0 })) {
+                Text("All Photos").tag(String?.none)
+                ForEach(library.albums) { Text("\($0.title) (\($0.count))").tag(String?.some($0.id)) }
             }
+            .labelsHidden()
+            .frame(minWidth: 120, maxWidth: 220)
+            .help("Album")
+            Button("Edit in Fotolark") {
+                if let id = selection.first { model.editFromPhotos(id) }
+            }
+            .fixedSize()
+            .disabled(selection.count != 1 || selection.first?.hasSuffix(PhotosLibrarySource.liveSuffix) == true)
+            .help("Edit the selected picture, then save it back to Photos. Photos keeps the original.")
+        }
+    }
+
+    @ViewBuilder
+    private var filterControls: some View {
+        HStack(spacing: 8) {
             Picker("Show", selection: $filter) {
                 ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
             .fixedSize()
             if filter == .dates {
-                DatePicker("From", selection: $from, displayedComponents: .date).labelsHidden()
-                DatePicker("To", selection: $to, displayedComponents: .date).labelsHidden()
+                DatePicker("From", selection: $from, displayedComponents: .date).labelsHidden().fixedSize()
+                Text("to").foregroundStyle(.secondary)
+                DatePicker("To", selection: $to, displayedComponents: .date).labelsHidden().fixedSize()
             }
-            Slider(value: $thumbSize, in: 90...260).frame(width: 90).accessibilityLabel("Thumbnail size")
         }
-        .padding(12)
+    }
+
+    private var sizeSlider: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "photo").font(.caption).foregroundStyle(.secondary)
+            Slider(value: $thumbSize, in: 90...260).frame(width: 90).accessibilityLabel("Thumbnail size")
+            Image(systemName: "photo").font(.body).foregroundStyle(.secondary)
+        }
     }
 
     private var summary: String {
@@ -216,7 +271,8 @@ struct ImportView: View {
                 }
                 if !selection.isEmpty {
                     HStack {
-                        Text("Only the \(selection.count) photos you clicked are imported.")
+                        Text(selection.count == 1 ? "Only the photo you clicked is imported."
+                             : "Only the \(selection.count) photos you clicked are imported.")
                             .font(.caption).foregroundStyle(.secondary)
                         Button("Select None") { selection = [] }.controlSize(.small)
                     }
