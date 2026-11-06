@@ -81,6 +81,17 @@ final class JobQueue {
         }
     }
 
+    /// A job whose work runs on the main actor (e.g. talking to a camera).
+    func runOnMain(_ title: String, total: Int, outputFolder: URL? = nil,
+                   perform: @escaping @MainActor (JobControl, @escaping (Int) -> Void) async -> BulkResult) {
+        let job = Job(title: title, total: total, outputFolder: outputFolder)
+        jobs.insert(job, at: 0)
+        Task {
+            let result = await perform(job.control) { done in job.done = max(job.done, done) }
+            finish(job, with: result)
+        }
+    }
+
     private func finish(_ job: Job, with result: BulkResult) {
         job.done = result.completed
         job.skipped = result.skipped

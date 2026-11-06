@@ -42,7 +42,7 @@ public final class JobControl: @unchecked Sendable {
     public func cancel() { lock.withLock { _cancelled = true } }
 
     /// Waits while paused. Returns false once cancelled.
-    func waitIfPaused() async -> Bool {
+    public func waitIfPaused() async -> Bool {
         while isPaused && !isCancelled {
             try? await Task.sleep(for: .milliseconds(150))
         }
@@ -55,6 +55,8 @@ public struct BulkResult: Sendable {
     public var skipped: [SkippedItem] = []
     public var completed = 0
     public var wasCancelled = false
+
+    public init() {}
 }
 
 public enum BulkRunner {

@@ -63,38 +63,53 @@ public enum RenamePlan {
         dateF.locale = Locale(identifier: "en_US_POSIX")
         var names: [String] = []
         for (i, url) in photos.enumerated() {
-            let base = url.deletingPathExtension().lastPathComponent
-            var ext = url.pathExtension
-            if rule.lowercaseExtension { ext = ext.lowercased() }
-            var newBase: String
-            switch rule.mode {
-            case .pattern:
-                let date = dates[url] ?? (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
-                dateF.dateFormat = "yyyy-MM-dd"
-                let day = dateF.string(from: date)
-                dateF.dateFormat = "HH-mm-ss"
-                let time = dateF.string(from: date)
-                let number = String(rule.startNumber + i)
-                let padded = String(repeating: "0", count: max(0, rule.digits - number.count)) + number
-                newBase = rule.pattern
-                    .replacingOccurrences(of: "{name}", with: base)
-                    .replacingOccurrences(of: "{date}", with: day)
-                    .replacingOccurrences(of: "{time}", with: time)
-                    .replacingOccurrences(of: "{number}", with: padded)
-                    .replacingOccurrences(of: "{folder}", with: url.deletingLastPathComponent().lastPathComponent)
-            case .findReplace:
-                newBase = rule.find.isEmpty ? base : base.replacingOccurrences(
-                    of: rule.find, with: rule.replace, options: rule.caseSensitive ? [] : [.caseInsensitive])
-            case .changeCase:
-                switch rule.textCase {
-                case .lower: newBase = base.lowercased()
-                case .upper: newBase = base.uppercased()
-                case .title: newBase = base.capitalized
-                }
-            }
-            newBase = newBase.trimmingCharacters(in: .whitespaces)
-            names.append(ext.isEmpty ? newBase : newBase + "." + ext)
+            let date = dates[url] ?? (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
+            names.append(newName(for: url, index: i, date: date, rule: rule, formatter: dateF))
         }
+        return check(photos: photos, names: names)
+    }
+
+    /// The new name for one photo. `index` sets {number}.
+    public static func newName(for url: URL, index i: Int, date: Date, rule: RenameRule) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return newName(for: url, index: i, date: date, rule: rule, formatter: f)
+    }
+
+    static func newName(for url: URL, index i: Int, date: Date, rule: RenameRule, formatter dateF: DateFormatter) -> String {
+        let base = url.deletingPathExtension().lastPathComponent
+        var ext = url.pathExtension
+        if rule.lowercaseExtension { ext = ext.lowercased() }
+        var newBase: String
+        switch rule.mode {
+        case .pattern:
+            dateF.dateFormat = "yyyy-MM-dd"
+            let day = dateF.string(from: date)
+            dateF.dateFormat = "HH-mm-ss"
+            let time = dateF.string(from: date)
+            let number = String(rule.startNumber + i)
+            let padded = String(repeating: "0", count: max(0, rule.digits - number.count)) + number
+            newBase = rule.pattern
+                .replacingOccurrences(of: "{name}", with: base)
+                .replacingOccurrences(of: "{date}", with: day)
+                .replacingOccurrences(of: "{time}", with: time)
+                .replacingOccurrences(of: "{number}", with: padded)
+                .replacingOccurrences(of: "{folder}", with: url.deletingLastPathComponent().lastPathComponent)
+        case .findReplace:
+            newBase = rule.find.isEmpty ? base : base.replacingOccurrences(
+                of: rule.find, with: rule.replace, options: rule.caseSensitive ? [] : [.caseInsensitive])
+        case .changeCase:
+            switch rule.textCase {
+            case .lower: newBase = base.lowercased()
+            case .upper: newBase = base.uppercased()
+            case .title: newBase = base.capitalized
+            }
+        }
+        newBase = newBase.trimmingCharacters(in: .whitespaces)
+        return ext.isEmpty ? newBase : newBase + "." + ext
+    }
+
+    static func check(photos: [URL], names: [String]) -> [RenamePreviewItem] {
 
         // Problems: bad names, two photos given the same name, or a name already used by
         // another file in that folder (one that isn't being renamed).

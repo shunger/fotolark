@@ -13,6 +13,8 @@ final class AppModel {
         case folder(URL)
         /// Photos opened one at a time (from Finder or the Open panel), not as a folder.
         case opened
+        /// Importing from a phone, camera, card or folder (key from `importKey`).
+        case importing(String)
     }
 
     var source: Source? {
@@ -47,6 +49,9 @@ final class AppModel {
     let fileOperations: PhotoFileOperations
     let library: FolderLibrary
     let jobs = JobQueue()
+    let devices = DeviceBrowser()
+    let importHistory: ImportHistory
+    private(set) var folderImports: [FolderImportSource] = []
     let promises: EditedPhotoPromise
     let backupDirectory: URL
     private let dates: DateTakenCache
@@ -65,6 +70,7 @@ final class AppModel {
         promises = EditedPhotoPromise(engine: engine)
         library = FolderLibrary(supportDirectory: support)
         dates = DateTakenCache(fileURL: caches.appendingPathComponent("DatesTaken.json"))
+        importHistory = ImportHistory(fileURL: support.appendingPathComponent("ImportHistory.json"))
         sortOrder = PhotoSortOrder(rawValue: UserDefaults.standard.string(forKey: "sortOrder") ?? "") ?? .dateTaken
         let size = UserDefaults.standard.double(forKey: "thumbnailSize")
         thumbnailSize = size > 0 ? size : 160
@@ -135,7 +141,7 @@ final class AppModel {
     func reloadPhotos(then completion: (() -> Void)? = nil) {
         loadGeneration += 1
         let generation = loadGeneration
-        guard let source else {
+        guard let source, source.isBrowsable else {
             photos = []
             completion?()
             return
@@ -149,6 +155,7 @@ final class AppModel {
                 switch source {
                 case .folder(let url): found = PhotoScanner.photos(in: url)
                 case .opened: found = opened.compactMap(Self.scan)
+                case .importing: found = []
                 }
                 return (found, store.recipes(for: found.map(\.url)))
             }.value
@@ -541,6 +548,95 @@ final class AppModel {
         }
     }
 
+    // MARK: Import
+
+    static func importKey(_ source: any ImportSource) -> String {
+        if let folder = source as? FolderImportSource { return "folder:" + folder.folder.path }
+        return "device:\(ObjectIdentifier(source).hashValue)"
+    }
+
+    var allImportSources: [any ImportSource] {
+        (devices.devices as [any ImportSource]) + (folderImports as [any ImportSource])
+    }
+
+    func importSource(for key: String) -> (any ImportSource)? {
+        allImportSources.first { Self.importKey($0) == key }
+    }
+
+    func importFromFolderWithPanel() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.prompt = "Import From Here"
+        panel.message = "Choose a memory card, drive or folder to import photos from. Subfolders are included."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let source = folderImports.first { $0.folder == url } ?? FolderImportSource(folder: url, thumbnails: thumbnails)
+        if !folderImports.contains(where: { $0 === source }) { folderImports.append(source) }
+        closeEditor()
+        self.source = .importing(Self.importKey(source))
+    }
+
+    func removeFolderImport(_ source: FolderImportSource) {
+        folderImports.removeAll { $0 === source }
+        if case .importing(let key) = self.source, key == Self.importKey(source) { self.source = nil }
+    }
+
+    /// Copies photos from a device into `root`, checking each copy, and optionally
+    /// deleting the checked ones from the device afterwards.
+    func runImport(_ items: [ImportCandidate], from source: any ImportSource, options: ImportOptions, to root: URL,
+                   deleteAfter: Bool) {
+        let engine = engine
+        let history = importHistory
+        jobs.runOnMain("Import \(items.count) from \(source.title)", total: items.count, outputFolder: root) { control, progress in
+            var result = BulkResult()
+            var verified: [ImportCandidate.ID] = []
+            var imported = 0
+            let temp = FileManager.default.temporaryDirectory
+                .appendingPathComponent("Fotolark Import", isDirectory: true)
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try? FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: temp) }
+
+            for (i, c) in items.enumerated() {
+                guard await control.waitIfPaused() else { break }
+                defer { result.completed = i + 1; progress(i + 1) }
+                if options.skipDuplicates,
+                   Importer.isDuplicate(c, index: imported, options: options, root: root, history: history) {
+                    result.skipped.append(SkippedItem(name: c.name, reason: "Already imported"))
+                    continue
+                }
+                do {
+                    let downloaded = try await source.download(c.id, to: temp)
+                    let index = imported
+                    let placed = try await Task.detached(priority: .userInitiated) {
+                        try Importer.place(downloaded, candidate: c, index: index, options: options, root: root, engine: engine)
+                    }.value
+                    imported += 1
+                    result.undo += placed.undo
+                    history.insert(c)
+                    if placed.verified {
+                        verified.append(c.id)
+                    } else if deleteAfter {
+                        result.skipped.append(SkippedItem(name: c.name, reason: "The copy couldn’t be checked, so it was left on \(source.title)"))
+                    }
+                } catch {
+                    result.skipped.append(SkippedItem(name: c.name, reason: error.localizedDescription))
+                }
+            }
+            history.save()
+            result.wasCancelled = control.isCancelled && result.completed < items.count
+
+            if deleteAfter && !verified.isEmpty && !control.isCancelled {
+                for name in await source.delete(verified) {
+                    result.skipped.append(SkippedItem(name: name, reason: "Couldn’t delete it from \(source.title)"))
+                }
+            }
+            self.library.add(root)
+            self.library.rescanAll()
+            return result
+        }
+    }
+
     // MARK: Settings
 
     var storesEditsInLibrary = UserDefaults.standard.bool(forKey: "storeEditsInLibrary") {
@@ -628,4 +724,16 @@ final class DateTakenCache: @unchecked Sendable {
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data?.write(to: fileURL, options: .atomic)
     }
+}
+
+extension AppModel.Source {
+    /// True for sources shown in the photo grid.
+    var isBrowsable: Bool {
+        if case .importing = self { return false }
+        return true
+    }
+}
+
+extension ImportSource {
+    var importKey: String { AppModel.importKey(self) }
 }

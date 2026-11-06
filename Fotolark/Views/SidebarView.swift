@@ -13,6 +13,30 @@ struct SidebarView: View {
             model.closeEditor()
             model.source = newValue
         })) {
+            Section("Import") {
+                ForEach(model.allImportSources, id: \.importKey) { source in
+                    Label(source.title, systemImage: source.systemImage)
+                        .tag(AppModel.Source.importing(AppModel.importKey(source)))
+                        .contextMenu {
+                            if let folder = source as? FolderImportSource {
+                                Button("Remove") { model.removeFolderImport(folder) }
+                            }
+                        }
+                }
+                Button {
+                    model.importFromFolderWithPanel()
+                } label: {
+                    Label("From Folder or Drive…", systemImage: "externaldrive.badge.plus")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                if model.devices.devices.isEmpty {
+                    Text("Plug in an iPhone, camera or card reader to import from it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if !model.openedPhotos.isEmpty {
                 Section("Opened") {
                     Label("Opened Photos", systemImage: "photo.stack")

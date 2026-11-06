@@ -63,6 +63,14 @@ struct ContentView: View {
             } message: {
                 Text("“\(editor.url.lastPathComponent)” will be replaced with the edited version. A backup of the original is kept and can be found with File › Show Backups in Finder.")
             }
+        } else if case .importing(let key) = model.source {
+            if let source = model.importSource(for: key) {
+                ImportView(model: model, source: source).id(key)
+                    .toolbar { ToolbarItem { JobsButton(model: model) } }
+            } else {
+                Text("This device was disconnected.").foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else if model.source != nil {
             BrowserView(model: model)
                 .toolbar {
@@ -81,6 +89,7 @@ struct ContentView: View {
         switch model.source {
         case .folder(let url): return url.lastPathComponent
         case .opened: return "Opened Photos"
+        case .importing(let key): return model.importSource(for: key)?.title ?? "Import"
         case nil: return "Fotolark"
         }
     }
@@ -89,7 +98,7 @@ struct ContentView: View {
         if let editor = model.editor {
             return [model.positionText, "\(editor.editedSize.description) px"].compactMap { $0 }.joined(separator: " · ")
         }
-        guard model.source != nil else { return "" }
+        guard let source = model.source, source.isBrowsable else { return "" }
         let n = model.photos.count
         let selected = model.selection.count > 1 ? " · \(model.selection.count) selected" : ""
         return (n == 1 ? "1 photo" : "\(n) photos") + selected

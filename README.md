@@ -16,7 +16,8 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
      edited photos, bulk job queue: **built**
   4. Bulk convert/rename/resize/rotate/move (with date folders), each with a
      preview: **built**
-  5. Import from iPhone, camera, SD card and drives
+  5. Import from iPhone, camera, SD card, drives and folders (new only, date range,
+     date folders, rename, HEIC → JPEG, skip duplicates, verified delete): **built**
   6. Shortcut cheat sheet and accessibility pass
 
 ## Build and test

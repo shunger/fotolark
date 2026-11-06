@@ -16,6 +16,8 @@ struct FotolarkCommands: Commands {
                 .keyboardShortcut("o")
             Button("Add Folder…") { model.addFolderWithPanel() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
+            Button("Import from Folder or Drive…") { model.importFromFolderWithPanel() }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
         }
 
         CommandGroup(replacing: .saveItem) {
