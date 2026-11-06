@@ -77,6 +77,7 @@ final class AppModel {
     let devices = DeviceBrowser()
     let importHistory: ImportHistory
     let albumStore: AlbumStore
+    let watchFolders: WatchFolders
     let index: LibraryIndex
     let analysis: AnalysisStore
     let peopleStore: PeopleStore
@@ -110,6 +111,7 @@ final class AppModel {
         dates = DateTakenCache(fileURL: caches.appendingPathComponent("DatesTaken.json"))
         importHistory = ImportHistory(fileURL: support.appendingPathComponent("ImportHistory.json"))
         albumStore = AlbumStore(fileURL: support.appendingPathComponent("Albums.json"))
+        watchFolders = WatchFolders(supportDirectory: support, engine: engine)
         albums = albumStore.albums
         index = LibraryIndex(fileURL: caches.appendingPathComponent("LibraryIndex.json"))
         analysis = AnalysisStore(fileURL: caches.appendingPathComponent("Analysis.plist"))

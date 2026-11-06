@@ -45,6 +45,39 @@
 			<true/>
 		</dict>
 	</array>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Resize with Fotolark</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>resizeWithFotolark</string>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.image</string>
+			</array>
+			<key>NSRequiredContext</key>
+			<dict/>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Quick Fix with Fotolark</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>quickFixWithFotolark</string>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.image</string>
+			</array>
+			<key>NSRequiredContext</key>
+			<dict/>
+		</dict>
+	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

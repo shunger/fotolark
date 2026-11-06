@@ -10,6 +10,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             FoldersSettings(model: model)
                 .tabItem { Label("Folders", systemImage: "folder") }
+            WatchFolderSettings(watch: model.watchFolders)
+                .tabItem { Label("Watch Folders", systemImage: "eye") }
             ExportSettings(model: model)
                 .tabItem { Label("Export", systemImage: "square.and.arrow.up") }
         }
@@ -138,5 +140,61 @@ private struct ExportSettings: View {
                 }
             }
         }
+    }
+}
+
+private struct WatchFolderSettings: View {
+    @Bindable var watch: WatchFolders
+    @State private var kind = 0
+    @State private var size = 2048
+    @State private var format: ExportFormat? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Drop photos into a watched folder and Fotolark converts or resizes them into a “Fotolark” folder inside it, while Fotolark is open. Originals are left alone.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            List {
+                ForEach(watch.rules) { rule in
+                    HStack {
+                        Toggle("", isOn: Binding(get: { rule.isEnabled }, set: { watch.setEnabled(rule.id, $0) }))
+                            .labelsHidden()
+                            .accessibilityLabel("Watch \(watch.folderName(rule))")
+                        VStack(alignment: .leading) {
+                            Text("\(watch.folderName(rule)) · \(rule.summary)")
+                            Text(watch.isAvailable(rule) ? (watch.status[rule.id] ?? rule.path) : "Not available. Is the drive connected?")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Remove") { watch.remove(rule.id) }
+                    }
+                }
+            }
+            .frame(minHeight: 140)
+            HStack {
+                Picker("Then", selection: $kind) {
+                    Text("Resize").tag(0)
+                    Text("Convert").tag(1)
+                    Text("Magic fix").tag(2)
+                }
+                .fixedSize()
+                if kind == 0 {
+                    TextField("Longest side", value: $size, format: .number).frame(width: 70)
+                    Text("px")
+                }
+                Picker("as", selection: $format) {
+                    if kind != 1 { Text("Same format").tag(ExportFormat?.none) }
+                    ForEach(ImageExporter.availableFormats) { Text($0.displayName).tag(ExportFormat?.some($0)) }
+                }
+                .fixedSize()
+                Spacer()
+                Button("Add Folder…") {
+                    let action: QuickActions.Action = kind == 0 ? .resize(longestSide: size)
+                        : kind == 1 ? .convert(format ?? .jpeg) : .autoFix
+                    watch.addWithPanel(action: action, format: kind == 1 ? nil : format)
+                }
+            }
+        }
+        .onChange(of: kind) { if kind == 1 && format == nil { format = .jpeg } }
     }
 }

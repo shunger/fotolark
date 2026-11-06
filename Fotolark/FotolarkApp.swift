@@ -29,6 +29,13 @@ struct FotolarkApp: App {
 /// Receives photos opened from Finder ("Open With", double-click when Fotolark is the
 /// default app) or dropped on the Dock icon.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let services = ServiceProvider()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.servicesProvider = services
+        NSUpdateDynamicServices()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         MainActor.assumeIsolated {
             AppModel.shared.open(urls)
