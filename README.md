@@ -60,7 +60,7 @@ The app is sandboxed and signed to run locally (no Apple Developer account neede
 
 ## Docs
 
-- [docs/plan.md](docs/plan.md) — full version plan: 109 features, 6 phases plus optional Phase 7, risks, next steps
+- [docs/plan.md](docs/plan.md) — full version plan: 113 features, 6 phases plus optional Phase 7 (maps and extras), risks, next steps
 - [docs/roadmap.png](docs/roadmap.png) — release roadmap diagram
 - [docs/naming-and-legal.md](docs/naming-and-legal.md) — name screening and rules for staying clear of Picasa/Google trademarks
 - [docs/release.md](docs/release.md) — Mac App Store release checklist; [app-store-listing.md](docs/app-store-listing.md), [privacy-policy.md](docs/privacy-policy.md) — drafts

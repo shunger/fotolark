@@ -40,7 +40,7 @@ The app will be built in Swift with SwiftUI, on Apple's own frameworks only. Tha
 
 ## Full feature list
 
-The full version has 109 features in 11 areas. The Phase column shows which release adds each one (phases are described in the next section).
+The full version has 113 features in 11 areas. The Phase column shows which release adds each one (phases are described in the next section).
 
 ### 1. Browsing and viewing
 
@@ -55,6 +55,7 @@ The full version has 109 features in 11 areas. The Phase column shows which rele
 | Slideshow | Full-screen slideshow with timing, transitions and optional music | 4 |
 | Info panel | Camera, lens, exposure, date, size and GPS coordinates (map view in Phase 7) | 2 |
 | Live update | New, renamed or deleted files appear in the app right away | 2 |
+| Photo tray | Hold photos from any folders in a tray, then export, share, print, collage, slideshow or add them to an album together | 7 |
 | Formats | JPEG, PNG, HEIC, TIFF, GIF, WebP, BMP and camera RAW | 1 (RAW in 3) |
 
 ### 2. Basic fixes
@@ -171,6 +172,7 @@ Bulk tools work on hundreds or thousands of photos at once. Every bulk job shows
 | Contact sheet | Many thumbnails on one page with names | 4 |
 | Collage | Grid, mosaic and freeform layouts with spacing and background | 4 |
 | Export to PDF | Combine selected photos into one PDF | 4 |
+| Make a movie | Turn photos into a video file with timing, transitions, titles and a song | 7 |
 
 ### 9. Organizing
 
@@ -182,6 +184,7 @@ Bulk tools work on hundreds or thousands of photos at once. Every bulk job shows
 | Search | By name, tag, date, camera, rating and text inside the photo (Vision OCR) | 4 |
 | Face grouping | Find and group faces on the Mac, with nothing sent to the cloud; name people | 5 |
 | Places | Map of photos that have GPS location, plus a map in the info panel (MapKit) | 7 |
+| Captions | A caption for each photo, shown under it, searchable, and saved inside the file (IPTC/XMP) so other apps see it | 7 |
 | Find duplicates | Exact and near-duplicate detection | 5 |
 | File operations | Move, copy, rename, delete to Trash, reveal in Finder | 2 |
 
@@ -200,6 +203,7 @@ Bulk tools work on hundreds or thousands of photos at once. Every bulk job shows
 | Accessibility | VoiceOver labels, keyboard-only use, larger text, reduced motion | 2 onward |
 | Help and onboarding | First-run tour, built-in help, tooltips | 5 |
 | Auto-update | Through the Mac App Store | 5 |
+| Backup | Copy photos and their Fotolark edits to an external drive; later backups copy only what's new or changed | 7 |
 
 ### 11. iPad and iPhone
 
@@ -219,7 +223,7 @@ These reuse the Mac app's editing engine and add a touch interface. All of them 
 
 ## Release phases
 
-The full version ships in six phases plus an optional seventh, and each one ends with an app you can use every day. That means the work can pause or change direction at any gate. Phase 1 is the MVP; Phases 2 to 5 complete the Mac app, and Phase 6 brings it to iPad and iPhone. Phase 7 (maps) is optional and only happens if wanted.
+The full version ships in six phases plus an optional seventh, and each one ends with an app you can use every day. That means the work can pause or change direction at any gate. Phase 1 is the MVP; Phases 2 to 5 complete the Mac app, and Phase 6 brings it to iPad and iPhone. Phase 7 (maps and extras) is optional and only happens if wanted.
 
 ![Release roadmap: 6 phases plus optional Phase 7](roadmap.png)
 
@@ -230,10 +234,10 @@ The full version ships in six phases plus an optional seventh, and each one ends
 | 3 | Retouch and creative | 5–8 | RAW, curves, HSL, noise reduction, red-eye; spot heal, clone, soften skin; effects and presets; text, watermarks, compare view | Retouching looks natural on real photos |
 | 4 | Organize and print | 6–10 | Stars, tags, albums, search, timeline, slideshow; brushes, gradients, object removal, background tools; print, collage, contact sheet, PDF | A month of daily use; feature list re-checked |
 | 5 | Extras and release | 3–5 | Faces, duplicates; Apple Photos access; Finder and Shortcuts actions, onboarding, help; Mac App Store release and updates | Mac app in daily use; join the Apple Developer Program |
-| 6 | iPad and iPhone | 8–12 | Touch interface for iPad; Apple Pencil retouching; camera and SD card import; simpler iPhone layout; edit inside Photos; bulk convert | Optional: start Phase 7 only if you want maps |
-| 7 | Maps (optional, future) | 1–2 | Map of a photo's location in the info panel; Places map of all GPS-tagged photos; built on MapKit | — |
+| 6 | iPad and iPhone | 8–12 | Touch interface for iPad; Apple Pencil retouching; camera and SD card import; simpler iPhone layout; edit inside Photos; bulk convert | Optional: start Phase 7 only if you want maps and the extras |
+| 7 | Maps and extras (optional, future) | 4–7 | Map of a photo's location in the info panel; Places map of all GPS-tagged photos (MapKit); make a movie from photos (AVFoundation); captions saved in the file; photo tray; backup to a drive | — |
 
-The rough total is 31 to 49 working sessions for Phases 1 to 6, plus 1 to 2 for the optional Phase 7, spread over a few months at a relaxed pace. These estimates are guesses and will get firmer after Phase 1.
+The rough total is 31 to 49 working sessions for Phases 1 to 6, plus 4 to 7 for the optional Phase 7, spread over a few months at a relaxed pace. These estimates are guesses and will get firmer after Phase 1.
 
 ## Out of scope (on purpose)
 
@@ -263,7 +267,7 @@ The hardest parts are the interactive tools (crop handles, brushes, healing) and
 | Big bulk jobs on iPad and iPhone | iOS pauses work soon after you leave the app | Keep the job queue resumable; show a "keep the app open" note on large jobs |
 | Engine drifts to Mac-only code | Makes Phase 6 much bigger | Keep the shared FotolarkKit free of Mac-only code; build it for iPad as well from Phase 1 |
 | Naming and trademarks | A name or look too close to Picasa or another app could force a rename after launch | "Fotolark" showed no apps, trademarks or domains in use (checked Nov 2026); run a USPTO class 9 search before launch; own icon, colors and wording; never use "Picasa", "Picasso" or Google phrases in the app; "for people who miss Picasa" only as a factual mention, never implying a link to Google |
-| Scope creep | 109 features is a lot | Ship each phase as a usable app; stop and use it before starting the next |
+| Scope creep | 113 features is a lot | Ship each phase as a usable app; stop and use it before starting the next |
 
 **Decisions needed:**
 
