@@ -38,14 +38,24 @@ final class DeviceBrowser: NSObject {
     }
 }
 
-extension DeviceBrowser: @preconcurrency ICDeviceBrowserDelegate {
-    func deviceBrowser(_ browser: ICDeviceBrowser, didAdd device: ICDevice, moreComing: Bool) {
-        guard let camera = device as? ICCameraDevice, !devices.contains(where: { $0.camera === camera }) else { return }
-        devices.append(CameraImportSource(camera: camera))
+extension DeviceBrowser: ICDeviceBrowserDelegate {
+    // Called on whatever queue ImageCaptureCore likes; the work happens on the main actor.
+    nonisolated func deviceBrowser(_ browser: ICDeviceBrowser, didAdd device: ICDevice, moreComing: Bool) {
+        guard let camera = device as? ICCameraDevice else { return }
+        let me = Unchecked(self), cam = Unchecked(camera)
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                guard !me.value.devices.contains(where: { $0.camera === cam.value }) else { return }
+                me.value.devices.append(CameraImportSource(camera: cam.value))
+            }
+        }
     }
 
-    func deviceBrowser(_ browser: ICDeviceBrowser, didRemove device: ICDevice, moreGoing: Bool) {
-        devices.removeAll { $0.camera === device }
+    nonisolated func deviceBrowser(_ browser: ICDeviceBrowser, didRemove device: ICDevice, moreGoing: Bool) {
+        let me = Unchecked(self), dev = Unchecked(device)
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { me.value.devices.removeAll { $0.camera === dev.value } }
+        }
     }
 }
 
@@ -93,30 +103,44 @@ final class CameraImportSource: NSObject, ImportSource {
 
     func download(_ id: String, to folder: URL) async throws -> URL {
         guard let file = files[id] else { throw CocoaError(.fileNoSuchFile) }
-        let options: [ICDownloadOption: Any] = [
-            .downloadsDirectoryURL: folder,
-            .overwrite: true,
-        ]
-        let name: String = try await withCheckedThrowingContinuation { continuation in
-            file.requestDownload(options: options) { filename, error in
-                if let filename { continuation.resume(returning: filename) }
-                else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
-            }
-        }
+        let name = try await Self.requestDownload(Unchecked(file), to: folder)
         return folder.appendingPathComponent(name)
     }
 
     func delete(_ ids: [String]) async -> [String] {
-        let targets = ids.compactMap { files[$0] }
-        return await withCheckedContinuation { continuation in
-            camera.requestDeleteFiles(targets, deleteFailed: { failed in
-                continuation.resume(returning: failed.values.compactMap { $0.name })
-            }, completion: { _, _ in })
+        await Self.requestDelete(Unchecked(ids.compactMap { files[$0] }), on: Unchecked(camera))
+    }
+
+    // ImageCaptureCore calls back on its own queue, so these callbacks must not belong
+    // to the main actor (Swift stops the app if they do).
+
+    nonisolated private static func requestDownload(_ file: Unchecked<ICCameraFile>, to folder: URL) async throws -> String {
+        let options: [ICDownloadOption: Any] = [
+            .downloadsDirectoryURL: folder,
+            .overwrite: true,
+        ]
+        return try await withCheckedThrowingContinuation { continuation in
+            file.value.requestDownload(options: options) { filename, error in
+                if let filename { continuation.resume(returning: filename) }
+                else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
+            }
+        }
+    }
+
+    nonisolated private static func requestDelete(_ files: Unchecked<[ICCameraFile]>,
+                                                  on camera: Unchecked<ICCameraDevice>) async -> [String] {
+        await withCheckedContinuation { continuation in
+            let once = ResumeOnce()
+            camera.value.requestDeleteFiles(files.value, deleteFailed: { failed in
+                if once.claim() { continuation.resume(returning: failed.values.compactMap { $0.name }) }
+            }, completion: { _, _ in
+                if once.claim() { continuation.resume(returning: []) }
+            })
         }
     }
 
     /// Name, size and date identify a file on the device for this session.
-    static func id(for file: ICCameraFile) -> String {
+    nonisolated static func id(for file: ICCameraFile) -> String {
         "\(file.name ?? "")|\(file.fileSize)|\(Int(file.creationDate?.timeIntervalSince1970 ?? 0))|\(file.ptpObjectHandle)"
     }
 
@@ -134,55 +158,84 @@ final class CameraImportSource: NSObject, ImportSource {
     }
 }
 
-extension CameraImportSource: @preconcurrency ICCameraDeviceDelegate {
-    func device(_ device: ICDevice, didOpenSessionWithError error: (any Error)?) {
-        if let error {
-            statusMessage = "Couldn’t connect: \(error.localizedDescription)"
-            isLoading = false
-        } else {
-            statusMessage = camera.isAccessRestrictedAppleDevice ? Self.lockedMessage : "Reading photos…"
+extension CameraImportSource: ICCameraDeviceDelegate {
+    // ImageCaptureCore may call these on any queue; each hands its news to the main actor.
+
+    nonisolated private func onMain(_ work: @escaping @MainActor (CameraImportSource) -> Void) {
+        let me = Unchecked(self)
+        DispatchQueue.main.async { MainActor.assumeIsolated { work(me.value) } }
+    }
+
+    nonisolated func device(_ device: ICDevice, didOpenSessionWithError error: (any Error)?) {
+        let message = error?.localizedDescription
+        onMain { me in
+            if let message {
+                me.statusMessage = "Couldn’t connect: \(message)"
+                me.isLoading = false
+            } else {
+                me.statusMessage = me.camera.isAccessRestrictedAppleDevice ? Self.lockedMessage : "Reading photos…"
+            }
         }
     }
 
     static let lockedMessage = "Unlock your iPhone or iPad. If it asks “Trust This Computer?”, tap Trust."
 
-    func deviceDidBecomeReady(withCompleteContentCatalog device: ICCameraDevice) {
-        refreshCandidates()
-        isLoading = false
-        statusMessage = candidates.isEmpty ? "No photos on \(title)." : nil
+    nonisolated func deviceDidBecomeReady(withCompleteContentCatalog device: ICCameraDevice) {
+        onMain { me in
+            me.refreshCandidates()
+            me.isLoading = false
+            me.statusMessage = me.candidates.isEmpty ? "No photos on \(me.title)." : nil
+        }
     }
 
-    func cameraDevice(_ camera: ICCameraDevice, didAdd items: [ICCameraItem]) {
-        if !isLoading { refreshCandidates() }
+    nonisolated func cameraDevice(_ camera: ICCameraDevice, didAdd items: [ICCameraItem]) {
+        onMain { me in if !me.isLoading { me.refreshCandidates() } }
     }
 
-    func cameraDevice(_ camera: ICCameraDevice, didRemove items: [ICCameraItem]) {
-        refreshCandidates()
+    nonisolated func cameraDevice(_ camera: ICCameraDevice, didRemove items: [ICCameraItem]) {
+        onMain { me in me.refreshCandidates() }
     }
 
-    func cameraDevice(_ camera: ICCameraDevice, didReceiveThumbnail thumbnail: CGImage?, for item: ICCameraItem,
-                      error: (any Error)?) {
+    nonisolated func cameraDevice(_ camera: ICCameraDevice, didReceiveThumbnail thumbnail: CGImage?, for item: ICCameraItem,
+                                  error: (any Error)?) {
         guard let thumbnail, let file = item as? ICCameraFile else { return }
         let id = Self.id(for: file)
-        thumbnails[id] = thumbnail
+        let image = Unchecked(thumbnail)
+        onMain { me in me.thumbnails[id] = image.value }
     }
 
-    func cameraDevice(_ camera: ICCameraDevice, didReceiveMetadata metadata: [AnyHashable: Any]?, for item: ICCameraItem,
-                      error: (any Error)?) {}
-    func cameraDevice(_ camera: ICCameraDevice, didRenameItems items: [ICCameraItem]) { refreshCandidates() }
-    func cameraDeviceDidChangeCapability(_ camera: ICCameraDevice) {}
-    func cameraDevice(_ camera: ICCameraDevice, didReceivePTPEvent eventData: Data) {}
+    nonisolated func cameraDevice(_ camera: ICCameraDevice, didReceiveMetadata metadata: [AnyHashable: Any]?,
+                                  for item: ICCameraItem, error: (any Error)?) {}
+    nonisolated func cameraDevice(_ camera: ICCameraDevice, didRenameItems items: [ICCameraItem]) {
+        onMain { me in me.refreshCandidates() }
+    }
+    nonisolated func cameraDeviceDidChangeCapability(_ camera: ICCameraDevice) {}
+    nonisolated func cameraDevice(_ camera: ICCameraDevice, didReceivePTPEvent eventData: Data) {}
 
-    func cameraDeviceDidRemoveAccessRestriction(_ device: ICDevice) {
-        statusMessage = isLoading ? "Reading photos…" : nil
+    nonisolated func cameraDeviceDidRemoveAccessRestriction(_ device: ICDevice) {
+        onMain { me in me.statusMessage = me.isLoading ? "Reading photos…" : nil }
     }
 
-    func cameraDeviceDidEnableAccessRestriction(_ device: ICDevice) {
-        statusMessage = Self.lockedMessage
+    nonisolated func cameraDeviceDidEnableAccessRestriction(_ device: ICDevice) {
+        onMain { me in me.statusMessage = Self.lockedMessage }
     }
 
-    func device(_ device: ICDevice, didCloseSessionWithError error: (any Error)?) {}
-    func didRemove(_ device: ICDevice) {}
+    nonisolated func device(_ device: ICDevice, didCloseSessionWithError error: (any Error)?) {}
+    nonisolated func didRemove(_ device: ICDevice) {}
+}
+
+/// Hands a value that isn't marked thread-safe between queues, where only one side
+/// uses it at a time (framework objects passed to and from callbacks).
+struct Unchecked<T>: @unchecked Sendable {
+    let value: T
+    init(_ value: T) { self.value = value }
+}
+
+/// Lets a continuation be resumed by whichever of two callbacks comes first.
+final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    func claim() -> Bool { lock.withLock { if done { return false }; done = true; return true } }
 }
 
 // MARK: - A folder or drive

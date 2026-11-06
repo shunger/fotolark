@@ -101,10 +101,8 @@ final class PhotosLibrarySource: ImportSource {
         let options = PHImageRequestOptions()
         options.isNetworkAccessAllowed = true
         options.deliveryMode = .opportunistic
-        imageManager.requestImage(for: asset, targetSize: CGSize(width: 300, height: 300), contentMode: .aspectFit,
-                                  options: options) { [weak self] image, _ in
-            guard let cg = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
-            MainActor.assumeIsolated { self?.thumbnails[id] = cg }
+        Self.requestImage(Unchecked(imageManager), asset: Unchecked(asset), options: Unchecked(options)) { [weak self] cg in
+            self?.thumbnails[id] = cg.value
         }
     }
 
@@ -135,6 +133,18 @@ final class PhotosLibrarySource: ImportSource {
 
     func delete(_ ids: [String]) async -> [String] { [] }
 
+    /// Photos may answer on another queue; the image is handed to the main actor.
+    nonisolated private static func requestImage(_ manager: Unchecked<PHCachingImageManager>, asset: Unchecked<PHAsset>,
+                                                 options: Unchecked<PHImageRequestOptions>,
+                                                 done: @escaping @MainActor (Unchecked<CGImage>) -> Void) {
+        manager.value.requestImage(for: asset.value, targetSize: CGSize(width: 300, height: 300), contentMode: .aspectFit,
+                                   options: options.value) { image, _ in
+            guard let cg = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+            let boxed = Unchecked(cg)
+            DispatchQueue.main.async { MainActor.assumeIsolated { done(boxed) } }
+        }
+    }
+
     func asset(_ id: String) -> PHAsset? { assets[id] }
 }
 
@@ -144,8 +154,8 @@ final class PhotosLibrarySource: ImportSource {
 /// picture again picks up where you left off.
 @MainActor
 final class PhotosEditSession {
-    static let format = "com.purehungerlabs.fotolark"
-    static let formatVersion = "1"
+    nonisolated static let format = "com.purehungerlabs.fotolark"
+    nonisolated static let formatVersion = "1"
 
     let asset: PHAsset
     let input: PHContentEditingInput
@@ -159,17 +169,7 @@ final class PhotosEditSession {
     }
 
     static func begin(_ asset: PHAsset, store: RecipeStore) async throws -> PhotosEditSession {
-        let options = PHContentEditingInputRequestOptions()
-        options.isNetworkAccessAllowed = true
-        options.canHandleAdjustmentData = { $0.formatIdentifier == format && $0.formatVersion == formatVersion }
-        let boxed: Boxed<PHContentEditingInput> = try await withCheckedThrowingContinuation { cont in
-            asset.requestContentEditingInput(with: options) { input, info in
-                if let input { cont.resume(returning: Boxed(input)) } else {
-                    cont.resume(throwing: (info[PHContentEditingInputErrorKey] as? Error) ?? CocoaError(.fileReadUnknown))
-                }
-            }
-        }
-        let input = boxed.value
+        let input = try await requestInput(Unchecked(asset)).value
         guard let source = input.fullSizeImageURL else { throw CocoaError(.fileReadUnknown) }
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Fotolark/Photos Edits", isDirectory: true)
@@ -201,15 +201,30 @@ final class PhotosEditSession {
                                                 options: ExportOptions(format: .jpeg, quality: 0.93), engine: engine)
             try jpeg.write(to: target, options: .atomic)
         }.value
-        let asset = asset
-        try await PHPhotoLibrary.shared().performChanges {
-            PHAssetChangeRequest(for: asset).contentEditingOutput = output
+        try await Self.commit(Unchecked(output), to: Unchecked(asset))
+    }
+
+    // Photos runs these callbacks on its own queues, so they must not belong to the
+    // main actor (Swift stops the app if they do).
+
+    nonisolated private static func requestInput(_ asset: Unchecked<PHAsset>) async throws -> Unchecked<PHContentEditingInput> {
+        // Made here so the adjustment check (which Photos calls on its own queue) isn't
+        // tied to the main actor.
+        let options = PHContentEditingInputRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.canHandleAdjustmentData = { $0.formatIdentifier == format && $0.formatVersion == formatVersion }
+        return try await withCheckedThrowingContinuation { cont in
+            asset.value.requestContentEditingInput(with: options) { input, info in
+                if let input { cont.resume(returning: Unchecked(input)) } else {
+                    cont.resume(throwing: (info[PHContentEditingInputErrorKey] as? Error) ?? CocoaError(.fileReadUnknown))
+                }
+            }
         }
     }
-}
 
-/// Hands a non-Sendable value from Photos' callback to the main actor (used by one side at a time).
-private struct Boxed<T>: @unchecked Sendable {
-    let value: T
-    init(_ value: T) { self.value = value }
+    nonisolated private static func commit(_ output: Unchecked<PHContentEditingOutput>, to asset: Unchecked<PHAsset>) async throws {
+        try await PHPhotoLibrary.shared().performChanges {
+            PHAssetChangeRequest(for: asset.value).contentEditingOutput = output.value
+        }
+    }
 }
