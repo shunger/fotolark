@@ -154,6 +154,9 @@ struct FotolarkCommands: Commands {
             Toggle("Show Info", isOn: $showInfo)
                 .keyboardShortcut("i")
             Toggle("Show Filmstrip", isOn: $showFilmstrip)
+            Button("Start Slideshow") { model.startSlideshow() }
+                .keyboardShortcut("p", modifiers: [.command, .option])
+                .disabled(!model.canStartSlideshow)
             Button("Compare Selected Photos") { model.compareSelection() }
                 .keyboardShortcut("k", modifiers: [.command, .option])
                 .disabled(!model.canCompare)

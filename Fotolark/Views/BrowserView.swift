@@ -67,6 +67,11 @@ struct BrowserView: View {
                 .help("Convert, resize, rename, rotate or move the selected photos")
             }
             ToolbarItem {
+                Button("Slideshow", systemImage: "play.rectangle") { model.startSlideshow() }
+                    .disabled(!model.canStartSlideshow)
+                    .help("Play the photos full screen (⌥⌘P). Plays just the selected ones if several are selected.")
+            }
+            ToolbarItem {
                 Button("Compare", systemImage: "rectangle.split.2x1") { model.compareSelection() }
                     .disabled(!model.canCompare)
                     .help("Compare 2 to 4 selected photos side by side (⌥⌘K)")

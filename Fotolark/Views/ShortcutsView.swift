@@ -16,6 +16,7 @@ struct ShortcutsView: View {
             ("Arrow keys", "Move around the grid"),
             ("⌘I", "Show or hide photo details"),
             ("⌥⌘K", "Compare 2–4 selected photos"),
+            ("⌥⌘P", "Slideshow (Space pauses, ← → move, Esc ends)"),
             ("⇧⌘R", "Show in Finder"),
             ("⌘⌫", "Move to Trash"),
         ]),

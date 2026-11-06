@@ -854,6 +854,24 @@ final class AppModel {
         if case .album(id) = source { source = nil }
     }
 
+    // MARK: Slideshow
+
+    var canStartSlideshow: Bool { !photos.isEmpty && comparing == nil }
+
+    /// Plays the selected photos (if several are selected) or all of them, starting
+    /// from the photo being edited or selected.
+    func startSlideshow() {
+        guard canStartSlideshow else { return }
+        let urls = selection.count > 1 && editor == nil
+            ? photos.map(\.url).filter { selection.contains($0) }
+            : photos.map(\.url)
+        let current = editor?.url ?? (selection.count == 1 ? selection.first : nil)
+        let start = current.flatMap { urls.firstIndex(of: $0) } ?? 0
+        var recipes = self.recipes
+        if let editor { editor.commitPending(); recipes[editor.url] = editor.history.current }
+        SlideshowWindow.show(urls: urls, start: start, recipes: recipes, engine: engine)
+    }
+
     // MARK: Compare
 
     /// Photos shown side by side, or nil when not comparing.

@@ -161,6 +161,8 @@ struct EditorToolbar: ToolbarContent {
             Button("Rotate Right", systemImage: "rotate.right") { editor.rotate(clockwise: true) }
                 .help("Rotate right (⌘])")
             CompareButton(editor: editor)
+            Button("Slideshow", systemImage: "play.rectangle") { model.startSlideshow() }
+                .help("Play the photos full screen from this one (⌥⌘P)")
             Button("Undo", systemImage: "arrow.uturn.backward") { editor.undo() }
                 .disabled(!editor.history.canUndo)
                 .help("Undo (⌘Z)")

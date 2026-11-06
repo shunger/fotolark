@@ -160,3 +160,27 @@ struct OrganizeTests {
         #expect(PhotoMetadata.read(photo).keywords.isEmpty)
     }
 }
+
+@Suite("Slideshow order")
+struct SlideshowTests {
+    @Test func inOrderStartsWhereAskedAndWraps() {
+        var s = SlideshowSettings()
+        #expect(s.order(count: 5, start: 2) == [2, 3, 4, 0, 1])
+        #expect(s.order(count: 0, start: 0).isEmpty)
+        s.shuffle = true
+        let shuffled = s.order(count: 50, start: 7, seed: 42)
+        #expect(shuffled.first == 7)
+        #expect(Set(shuffled) == Set(0..<50))
+        #expect(shuffled.count == 50)
+        #expect(shuffled == s.order(count: 50, start: 7, seed: 42), "same seed, same order")
+        #expect(shuffled != Array(7..<50) + Array(0..<7))
+    }
+
+    @Test func settingsRoundTrip() throws {
+        var s = SlideshowSettings()
+        s.seconds = 6
+        s.transition = .kenBurns
+        let back = try JSONDecoder().decode(SlideshowSettings.self, from: JSONEncoder().encode(s))
+        #expect(back == s)
+    }
+}

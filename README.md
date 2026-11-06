@@ -33,7 +33,7 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
 - Phase 4 (organize and print): in progress. Batches:
   1. Star ratings, pick/reject flags, tags (optionally saved into the files), albums: **built**
   2. Library index, search (including text in photos), filters, timeline: **built**
-  3. Slideshow
+  3. Slideshow: **built**
   4. Brush and gradient adjustments, tilt-shift, lens correction
   5. Object removal, background blur, remove background
   6. Borders and frames, shapes and arrows, versions
