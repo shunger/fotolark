@@ -63,6 +63,8 @@ struct ContentView: View {
             } message: {
                 Text("“\(editor.url.lastPathComponent)” will be replaced with the edited version. A backup of the original is kept and can be found with File › Show Backups in Finder.")
             }
+        } else if let photos = model.comparing {
+            CompareView(model: model, photos: photos)
         } else if case .importing(let key) = model.source {
             if let source = model.importSource(for: key) {
                 ImportView(model: model, source: source).id(key)

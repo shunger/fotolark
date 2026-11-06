@@ -18,7 +18,7 @@ final class AppModel {
     }
 
     var source: Source? {
-        didSet { if source != oldValue { selection = []; reloadPhotos() } }
+        didSet { if source != oldValue { comparing = nil; selection = []; reloadPhotos() } }
     }
 
     /// Photos of the current source, in the chosen order.
@@ -208,6 +208,7 @@ final class AppModel {
     // MARK: Editing
 
     func openEditor(_ url: URL) {
+        comparing = nil
         editor?.saveNow()
         zoomScale = nil
         do {
@@ -572,6 +573,23 @@ final class AppModel {
                  maxConcurrent: 1, name: { $0.lastPathComponent }) { url in
             try BulkTools.transfer(url, copy: copy, to: folder, dateFolders: dateFolders, dateTaken: dates[url], store: store)
         }
+    }
+
+    // MARK: Compare
+
+    /// Photos shown side by side, or nil when not comparing.
+    private(set) var comparing: [URL]?
+
+    var canCompare: Bool { editor == nil && (2...4).contains(targetPhotos.count) }
+
+    func compareSelection() {
+        guard canCompare else { return }
+        comparing = targetPhotos
+    }
+
+    func endCompare() {
+        if let first = comparing?.first { selection = Set(comparing ?? [first]) }
+        comparing = nil
     }
 
     // MARK: Import

@@ -130,7 +130,10 @@ struct FotolarkCommands: Commands {
             Toggle("Show Info", isOn: $showInfo)
                 .keyboardShortcut("i")
             Toggle("Show Filmstrip", isOn: $showFilmstrip)
-            Button("Back to All Photos") { model.closeEditor() }
+            Button("Compare Selected Photos") { model.compareSelection() }
+                .keyboardShortcut("k", modifiers: [.command, .option])
+                .disabled(!model.canCompare)
+            Button("Back to All Photos") { model.closeEditor(); model.endCompare() }
                 .disabled(editor == nil)
             Divider()
         }

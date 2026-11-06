@@ -56,6 +56,11 @@ struct BrowserView: View {
                 .disabled(model.targetPhotos.isEmpty)
                 .help("Convert, resize, rename, rotate or move the selected photos")
             }
+            ToolbarItem {
+                Button("Compare", systemImage: "rectangle.split.2x1") { model.compareSelection() }
+                    .disabled(!model.canCompare)
+                    .help("Compare 2 to 4 selected photos side by side (⌥⌘K)")
+            }
             ToolbarItem { ShareButton(model: model) }
             ToolbarItem { JobsButton(model: model) }
             ToolbarItem {
@@ -100,6 +105,7 @@ enum FileMenu {
         let menu = NSMenu()
         let count = model.targetPhotos.count
         menu.addItem(ActionItem("Open", enabled: count == 1) { model.openSelection() })
+        menu.addItem(ActionItem("Compare", enabled: model.canCompare) { model.compareSelection() })
         menu.addItem(.separator())
         menu.addItem(ActionItem("Copy Edits", enabled: model.editsToCopy != nil) { model.copyEdits() })
         menu.addItem(ActionItem(count == 1 ? "Paste Edits" : "Paste Edits onto \(count) Photos",

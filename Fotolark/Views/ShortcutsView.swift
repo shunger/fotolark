@@ -15,6 +15,7 @@ struct ShortcutsView: View {
             ("Return or double-click", "Edit the selected photo"),
             ("Arrow keys", "Move around the grid"),
             ("⌘I", "Show or hide photo details"),
+            ("⌥⌘K", "Compare 2–4 selected photos"),
             ("⇧⌘R", "Show in Finder"),
             ("⌘⌫", "Move to Trash"),
         ]),
