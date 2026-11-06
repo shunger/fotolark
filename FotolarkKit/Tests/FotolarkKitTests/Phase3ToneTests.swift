@@ -62,16 +62,19 @@ struct Phase3ToneTests {
                 abs(averageColor(RecipeRenderer.apply(EditRecipe().setting(.colorRanges(r)), to: grayIn)).g - 127.5) < 2)
     }
 
-    /// A gray image with random brightness and color speckles.
+    /// A gray image with brightness and color speckles. Built from a seeded pattern (not
+    /// Core Image's random generator, whose pixels aren't stable between renders).
     func noisy() -> CIImage {
-        let noise = CIFilter(name: "CIRandomGenerator")!.outputImage!.cropped(to: CGRect(x: 0, y: 0, width: 200, height: 150))
-        let faint = noise.applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: 0.06, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: 0.06, z: 0, w: 0),
-            "inputBVector": CIVector(x: 0, y: 0, z: 0.06, w: 0), "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-            "inputBiasVector": CIVector(x: 0.47, y: 0.47, z: 0.47, w: 1),  // opaque: the generator's alpha is random too
-        ])
-        // A bias makes the filter's output infinite; crop it back.
-        return faint.cropped(to: CGRect(x: 0, y: 0, width: 200, height: 150))
+        var seed: UInt64 = 12345
+        func next() -> Int {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Int((seed >> 33) % 33) - 16
+        }
+        var g = Grid(width: 200, height: 150, pixels: [])
+        for _ in 0..<(200 * 150) {
+            g.pixels.append([UInt8(120 + next()), UInt8(120 + next()), UInt8(120 + next()), 255])
+        }
+        return g.ciImage
     }
 
     func spread(_ g: Grid, channel: (([UInt8]) -> Double)) -> Double {

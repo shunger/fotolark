@@ -99,6 +99,8 @@ struct CanvasView: View {
                 CropOverlay(rect: $editor.cropDraft, aspect: editor.normalizedCropAspect)
             case .straighten:
                 GridOverlay(divisions: 8)
+            case .retouch:
+                RetouchOverlay(editor: editor)
             case .redEye:
                 GeometryReader { geo in
                     let longest = max(geo.size.width, geo.size.height)
@@ -237,5 +239,77 @@ struct GridOverlay: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// Brush painting for spot heal, clone and soften skin.
+struct RetouchOverlay: View {
+    @Bindable var editor: PhotoEditor
+    @State private var hover: CGPoint?
+    @State private var stroke: [CGPoint] = []
+    @State private var isSettingSource = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            let longest = max(size.width, size.height)
+            ZStack {
+                Color.clear.contentShape(Rectangle())
+                // The stroke being painted.
+                Path { p in
+                    guard let first = stroke.first else { return }
+                    p.move(to: first)
+                    for pt in stroke.dropFirst() { p.addLine(to: pt) }
+                }
+                .stroke(Color.white.opacity(0.45), style: StrokeStyle(lineWidth: editor.brushSize * 2, lineCap: .round, lineJoin: .round))
+                // Brush outline.
+                if let hover {
+                    Circle()
+                        .strokeBorder(Color.white, lineWidth: 1)
+                        .shadow(color: .black.opacity(0.7), radius: 1)
+                        .frame(width: editor.brushSize * 2, height: editor.brushSize * 2)
+                        .position(hover)
+                }
+                // Clone source marker.
+                if editor.retouchTool == .clone, let src = editor.cloneSourceDisplayPoint {
+                    Image(systemName: "plus.circle")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.7), radius: 1)
+                        .position(x: src.x * size.width, y: src.y * size.height)
+                        .accessibilityLabel("Clone source")
+                }
+            }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let p): hover = p; NSCursor.crosshair.set()
+                case .ended: hover = nil; NSCursor.arrow.set()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        if stroke.isEmpty && NSEvent.modifierFlags.contains(.option) && editor.retouchTool == .clone {
+                            isSettingSource = true
+                        }
+                        hover = value.location
+                        if isSettingSource { return }
+                        if stroke.last.map({ hypot($0.x - value.location.x, $0.y - value.location.y) > 2 }) ?? true {
+                            stroke.append(value.location)
+                        }
+                    }
+                    .onEnded { value in
+                        defer { stroke = []; isSettingSource = false }
+                        let norm = { (p: CGPoint) in CGPoint(x: p.x / size.width, y: p.y / size.height) }
+                        if isSettingSource {
+                            editor.setCloneSource(atDisplayPoint: norm(value.location))
+                            return
+                        }
+                        let pts = (stroke.isEmpty ? [value.location] : stroke).map(norm)
+                        editor.addStroke(displayPoints: pts, radiusFraction: editor.brushSize / longest)
+                    }
+            )
+        }
+        .accessibilityLabel("Paint over the area to retouch")
     }
 }

@@ -13,6 +13,8 @@ public enum EditOperation: Equatable, Sendable {
     case whiteBalance(ChannelGains)
     /// Red eyes fixed, as spots on the original photo.
     case redEye([EyeSpot])
+    /// Spot heal, clone and soften-skin strokes, in the order made.
+    case retouch([RetouchStroke])
     /// Light and color sliders.
     case adjust(Adjustments)
     /// Input and output levels.
@@ -33,7 +35,7 @@ public enum EditOperation: Equatable, Sendable {
 
     /// The kind of an operation; a recipe holds at most one operation of each kind.
     public enum Kind: String, Codable, CaseIterable, Sendable, Comparable {
-        case magicFix, autoContrast, autoColor, whiteBalance, redEye, adjust, levels, curves, colorRanges, orient, straighten, crop, resize
+        case magicFix, autoContrast, autoColor, whiteBalance, redEye, retouch, adjust, levels, curves, colorRanges, orient, straighten, crop, resize
 
         /// Canonical position in a recipe: tone and color first, then geometry, then size.
         var order: Int { Kind.allCases.firstIndex(of: self)! }
@@ -55,6 +57,7 @@ public enum EditOperation: Equatable, Sendable {
         case .autoColor: .autoColor
         case .whiteBalance: .whiteBalance
         case .redEye: .redEye
+        case .retouch: .retouch
         case .adjust: .adjust
         case .levels: .levels
         case .curves: .curves
@@ -74,6 +77,7 @@ public enum EditOperation: Equatable, Sendable {
         case .autoColor(let gains): gains == .identity
         case .whiteBalance(let gains): gains == .identity
         case .redEye(let spots): spots.isEmpty
+        case .retouch(let strokes): strokes.isEmpty
         case .adjust(let adjustments): adjustments == Adjustments()
         case .levels(let l): l.isIdentity
         case .curves(let c): c.isIdentity
@@ -102,6 +106,7 @@ extension EditOperation: Codable {
         case .autoColor: self = .autoColor(try c.decode(ChannelGains.self, forKey: .value))
         case .whiteBalance: self = .whiteBalance(try c.decode(ChannelGains.self, forKey: .value))
         case .redEye: self = .redEye(try c.decode([EyeSpot].self, forKey: .value))
+        case .retouch: self = .retouch(try c.decode([RetouchStroke].self, forKey: .value))
         case .adjust: self = .adjust(try c.decode(Adjustments.self, forKey: .value))
         case .levels: self = .levels(try c.decode(ToneLevels.self, forKey: .value))
         case .curves: self = .curves(try c.decode(Curves.self, forKey: .value))
@@ -122,6 +127,7 @@ extension EditOperation: Codable {
         case .autoColor(let v): try c.encode(v, forKey: .value)
         case .whiteBalance(let v): try c.encode(v, forKey: .value)
         case .redEye(let v): try c.encode(v, forKey: .value)
+        case .retouch(let v): try c.encode(v, forKey: .value)
         case .adjust(let v): try c.encode(v, forKey: .value)
         case .levels(let v): try c.encode(v, forKey: .value)
         case .curves(let v): try c.encode(v, forKey: .value)

@@ -23,6 +23,7 @@ public enum RecipeRenderer {
         case .autoColor(let gains): applyGains(gains, to: image)
         case .whiteBalance(let gains): applyGains(gains, to: image)
         case .redEye(let spots): applyRedEye(spots, to: image)
+        case .retouch(let strokes): applyRetouch(strokes, to: image)
         case .adjust(let a): applyAdjustments(a, to: image)
         case .levels(let l): applyLookupCurves(red: l.value, green: l.value, blue: l.value, to: image)
         case .curves(let c):

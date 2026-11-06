@@ -13,7 +13,7 @@ struct SendableImage: @unchecked Sendable {
 /// and saves the recipe to the sidecar file.
 @MainActor @Observable
 final class PhotoEditor {
-    enum Tool { case none, crop, straighten, whiteBalance, redEye }
+    enum Tool { case none, crop, straighten, whiteBalance, redEye, retouch }
 
     /// Longest side of the copy used while editing; full resolution is loaded only for
     /// close-up zoom and export.
@@ -277,6 +277,91 @@ final class PhotoEditor {
                 toolMessage = "The subject already fills the photo, so there's nothing to crop."
             }
         }
+    }
+
+    // MARK: Retouching
+
+    var retouchTool = RetouchStroke.Tool.heal { didSet { toolMessage = nil } }
+    /// Brush radius in screen points.
+    var brushSize = 20.0
+    var softenStrength = 0.7
+    /// Where Clone copies from (a point on the original photo).
+    var cloneSource: CGPoint?
+
+    var retouchStrokes: [RetouchStroke] {
+        if case .retouch(let strokes) = recipe.operation(.retouch) { return strokes }
+        return []
+    }
+
+    func beginRetouch() {
+        commitPending()
+        tool = .retouch
+    }
+
+    /// Sets where Clone copies from (⌥-click), from a point on the photo as shown.
+    func setCloneSource(atDisplayPoint p: CGPoint) {
+        cloneSource = PointMapping.sourcePoint(fromDisplay: p, recipe: shownRecipe, sourceSize: info.pixelSize)
+        toolMessage = "Now paint where you want to copy to."
+    }
+
+    /// Where the clone source is on screen.
+    var cloneSourceDisplayPoint: CGPoint? {
+        cloneSource.flatMap { PointMapping.displayPoint(fromSource: $0, recipe: shownRecipe, sourceSize: info.pixelSize) }
+    }
+
+    /// Adds a stroke painted on screen. `points` are normalized to the shown photo and
+    /// `radiusFraction` is the brush radius as a fraction of the shown photo's longest side.
+    func addStroke(displayPoints points: [CGPoint], radiusFraction: Double) {
+        guard !points.isEmpty else { return }
+        let source = points.map { PointMapping.sourcePoint(fromDisplay: $0, recipe: shownRecipe, sourceSize: info.pixelSize) }
+        let shownLongest = Double(max(shownSize.width, shownSize.height))
+        let sourceLongest = Double(max(info.pixelSize.width, info.pixelSize.height))
+        let radius = radiusFraction * shownLongest / sourceLongest
+        let curvePoints = source.map { CurvePoint($0.x, $0.y) }
+
+        switch retouchTool {
+        case .clone:
+            guard let from = cloneSource else {
+                toolMessage = "First ⌥-click (Option-click) the spot to copy from."
+                return
+            }
+            let offset = CurvePoint(from.x - source[0].x, from.y - source[0].y)
+            appendStroke(RetouchStroke(tool: .clone, points: curvePoints, radius: radius, sourceOffset: offset), label: "Clone")
+        case .soften:
+            appendStroke(RetouchStroke(tool: .soften, points: curvePoints, radius: radius, strength: softenStrength),
+                         label: "Soften skin")
+        case .heal:
+            guard let proxy else { return }
+            // Pick the source for the middle of the stroke, far enough to clear all of it.
+            let xs = source.map(\.x), ys = source.map(\.y)
+            let center = CGPoint(x: (xs.min()! + xs.max()!) / 2, y: (ys.min()! + ys.max()!) / 2)
+            let aspect = Double(info.pixelSize.width) / Double(max(info.pixelSize.height, 1))
+            let spanX = (xs.max()! - xs.min()!) * (aspect >= 1 ? 1 : aspect)
+            let spanY = (ys.max()! - ys.min()!) * (aspect >= 1 ? 1 / aspect : 1)
+            let reach = radius + max(spanX, spanY) / 2
+            let image = SendableImage(image: RecipeRenderer.apply(recipe.prefix(before: .adjust), to: proxy.image))
+            let engine = engine
+            isBusy = true
+            Task {
+                let offset = await Task.detached(priority: .userInitiated) {
+                    engine.healSourceOffset(for: center, radius: reach, in: image.image)
+                }.value
+                isBusy = false
+                appendStroke(RetouchStroke(tool: .heal, points: curvePoints, radius: radius, sourceOffset: offset),
+                             label: "Spot heal")
+            }
+        }
+    }
+
+    private func appendStroke(_ stroke: RetouchStroke, label: String) {
+        apply(recipe.setting(.retouch(retouchStrokes + [stroke])), label: label)
+    }
+
+    func undoLastStroke() {
+        var strokes = retouchStrokes
+        guard !strokes.isEmpty else { return }
+        strokes.removeLast()
+        apply(recipe.setting(.retouch(strokes)), label: "Remove stroke")
     }
 
     // MARK: Red eye

@@ -26,6 +26,7 @@ struct ShortcutsView: View {
             ("⌥⌘B", "Neutral color picker"),
             ("⌥⌘C", "Crop"),
             ("⌥⌘T", "Straighten"),
+            ("⌥⌘H", "Retouch (spot heal, clone, soften skin)"),
             ("⌘[ and ⌘]", "Rotate left or right"),
             ("⌥⌘R", "Resize"),
             ("⌘Z, ⇧⌘Z", "Undo, redo"),

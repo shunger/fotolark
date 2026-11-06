@@ -14,6 +14,7 @@ struct InspectorView: View {
                 case .straighten: StraightenPanel(editor: editor)
                 case .whiteBalance: WhiteBalancePanel(editor: editor)
                 case .redEye: RedEyePanel(editor: editor)
+                case .retouch: RetouchPanel(editor: editor)
                 case .none: mainPanels
                 }
             }
@@ -49,6 +50,10 @@ struct InspectorView: View {
                 } else {
                     editor.beginWhiteBalance()
                 }
+            }
+            FixButton(title: "Retouch", systemImage: "bandage", isOn: editor.has(.retouch),
+                      help: "Remove spots and blemishes, copy one area over another, or soften skin") {
+                editor.beginRetouch()
             }
             FixButton(title: "Red-eye", systemImage: "eye", isOn: editor.has(.redEye),
                       help: "Finds and fixes red eyes from the camera flash; click any it misses") {
@@ -459,6 +464,58 @@ struct RedEyePanel: View {
                 .keyboardShortcut(.defaultAction)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+}
+
+/// Shown while retouching.
+struct RetouchPanel: View {
+    @Bindable var editor: PhotoEditor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Retouch").font(.headline)
+            Picker("Tool", selection: $editor.retouchTool) {
+                Text("Spot heal").tag(RetouchStroke.Tool.heal)
+                Text("Clone").tag(RetouchStroke.Tool.clone)
+                Text("Soften skin").tag(RetouchStroke.Tool.soften)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text(help)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack { Text("Brush size"); Spacer(); Text("\(Int(editor.brushSize))").monospacedDigit() }.font(.callout)
+                Slider(value: $editor.brushSize, in: 4...150).controlSize(.small).accessibilityLabel("Brush size")
+            }
+            if editor.retouchTool == .soften {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack { Text("Strength"); Spacer(); Text("\(Int(editor.softenStrength * 100))").monospacedDigit() }.font(.callout)
+                    Slider(value: $editor.softenStrength, in: 0.1...1).controlSize(.small).accessibilityLabel("Soften strength")
+                }
+            }
+            if let message = editor.toolMessage {
+                Label(message, systemImage: "info.circle").font(.callout).fixedSize(horizontal: false, vertical: true)
+            }
+            Text("Tip: zoom in (⌘=) for small spots.").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button("Undo Last Stroke") { editor.undoLastStroke() }
+                    .disabled(editor.retouchStrokes.isEmpty)
+                Spacer()
+                Button("Done") { editor.tool = .none }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .controlSize(.large)
+        }
+    }
+
+    private var help: String {
+        switch editor.retouchTool {
+        case .heal: "Click a spot or paint over a blemish. Fotolark fills it with nearby texture that matches the light around it."
+        case .clone: "⌥-click (Option-click) the area to copy from, then paint where it should go."
+        case .soften: "Paint over skin to smooth it gently. Leave eyes, lips and hair sharp."
         }
     }
 }
