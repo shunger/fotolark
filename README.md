@@ -14,7 +14,8 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
      copy/paste edits: **built**
   3. Strip metadata, export presets, multi-photo export, Share sheet, drag out
      edited photos, bulk job queue: **built**
-  4. Bulk convert/rename/resize/rotate/move with a job queue
+  4. Bulk convert/rename/resize/rotate/move (with date folders), each with a
+     preview: **built**
   5. Import from iPhone, camera, SD card and drives
   6. Shortcut cheat sheet and accessibility pass
 

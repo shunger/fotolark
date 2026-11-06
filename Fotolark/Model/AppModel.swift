@@ -251,9 +251,18 @@ final class AppModel {
 
     // MARK: Window state
 
-    enum Sheet: String, Identifiable {
+    enum Sheet: Identifiable {
         case export, resize, rename
-        var id: String { rawValue }
+        case bulk(BulkTool)
+
+        var id: String {
+            switch self {
+            case .export: "export"
+            case .resize: "resize"
+            case .rename: "rename"
+            case .bulk: "bulk"
+            }
+        }
     }
 
     var sheet: Sheet?
@@ -463,6 +472,73 @@ final class AppModel {
         return await Task.detached(priority: .userInitiated) {
             Self.renderForSharing(photos, recipes: recipes, engine: engine)
         }.value
+    }
+
+    // MARK: Bulk tools
+
+    /// Capture dates (falling back to the file's creation date) for renaming and sorting.
+    func datesTaken(for urls: [URL]) -> [URL: Date] {
+        let known = photos.filter { urls.contains($0.url) }
+        var out = dates.dates(for: known)
+        for url in urls where out[url] == nil {
+            out[url] = PhotoMetadata.dateTaken(url) ?? (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate)
+        }
+        return out
+    }
+
+    func bulkConvert(_ photos: [URL], options: ExportOptions, includeEdits: Bool, to folder: URL?) {
+        let recipes = Dictionary(uniqueKeysWithValues: photos.map { ($0, includeEdits ? recipe(for: $0) : EditRecipe()) })
+        let engine = engine
+        jobs.run("Convert \(photos.count) to \(options.format.displayName)", items: photos, outputFolder: folder,
+                 name: { $0.lastPathComponent }) { url in
+            try BulkTools.exportCopy(of: url, recipe: recipes[url] ?? EditRecipe(), options: options,
+                                     to: folder ?? url.deletingLastPathComponent(), engine: engine)
+        }
+    }
+
+    func bulkResize(_ photos: [URL], rule: BulkTools.ResizeRule, allowEnlarging: Bool, format: ExportFormat?,
+                    quality: Double, includeEdits: Bool, to folder: URL?) {
+        let recipes = Dictionary(uniqueKeysWithValues: photos.map { ($0, includeEdits ? recipe(for: $0) : EditRecipe()) })
+        let engine = engine
+        jobs.run("Resize \(photos.count) photos", items: photos, outputFolder: folder,
+                 name: { $0.lastPathComponent }) { url in
+            let options = ExportOptions(format: format ?? BulkTools.sameFormat(as: url), quality: quality)
+            let out = folder ?? url.deletingLastPathComponent().appendingPathComponent("Resized", isDirectory: true)
+            return try BulkTools.resizedCopy(of: url, recipe: recipes[url] ?? EditRecipe(), rule: rule,
+                                             allowEnlarging: allowEnlarging, options: options, to: out, engine: engine)
+        }
+    }
+
+    func bulkRename(_ items: [RenamePreviewItem]) {
+        closeEditor()
+        let store = store
+        let count = items.filter { $0.problem == nil && !$0.isUnchanged }.count
+        jobs.add("Rename \(count) photos", total: count) { _, progress in
+            RenamePlan.apply(items, store: store, progress: progress)
+        }
+    }
+
+    func bulkRotate(_ photos: [URL], turns: Int) {
+        if let editor, photos == [editor.url] {
+            for _ in 0..<abs(turns) { editor.rotate(clockwise: turns > 0) }
+            return
+        }
+        let store = store
+        jobs.run("Rotate \(photos.count) photos", items: photos, name: { $0.lastPathComponent }) { url in
+            var steps: [UndoStep] = []
+            for _ in 0..<abs(turns) { steps += try BulkTools.rotate(url, clockwise: turns > 0, store: store) }
+            // Undo only needs the edits from before the first turn.
+            return Array(steps.prefix(1))
+        }
+    }
+
+    func bulkTransfer(_ photos: [URL], copy: Bool, to folder: URL, dateFolders: DateFolderPattern?, dates: [URL: Date]) {
+        if !copy { closeEditor() }
+        let store = store
+        jobs.run("\(copy ? "Copy" : "Move") \(photos.count) photos", items: photos, outputFolder: folder,
+                 maxConcurrent: 1, name: { $0.lastPathComponent }) { url in
+            try BulkTools.transfer(url, copy: copy, to: folder, dateFolders: dateFolders, dateTaken: dates[url], store: store)
+        }
     }
 
     // MARK: Settings

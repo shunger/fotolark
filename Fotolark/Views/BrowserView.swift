@@ -45,6 +45,17 @@ struct BrowserView: View {
                     .disabled(model.targetPhotos.isEmpty)
                     .help("Export edited copies (⌘E)")
             }
+            ToolbarItem {
+                Menu {
+                    ForEach(BulkTool.allCases) { tool in
+                        Button { model.sheet = .bulk(tool) } label: { Label("\(tool.title)…", systemImage: tool.systemImage) }
+                    }
+                } label: {
+                    Label("Bulk", systemImage: "square.stack.3d.up")
+                }
+                .disabled(model.targetPhotos.isEmpty)
+                .help("Convert, resize, rename, rotate or move the selected photos")
+            }
             ToolbarItem { ShareButton(model: model) }
             ToolbarItem { JobsButton(model: model) }
             ToolbarItem {
@@ -96,6 +107,12 @@ enum FileMenu {
         menu.addItem(.separator())
         menu.addItem(ActionItem("Show in Finder") { model.revealInFinder() })
         menu.addItem(ActionItem("Rename…", enabled: count == 1) { model.sheet = .rename })
+        let bulk = NSMenuItem(title: "Bulk", action: nil, keyEquivalent: "")
+        bulk.submenu = NSMenu()
+        for tool in BulkTool.allCases {
+            bulk.submenu?.addItem(ActionItem("\(tool.title)…") { model.sheet = .bulk(tool) })
+        }
+        menu.addItem(bulk)
         menu.addItem(ActionItem("Copy To…") { model.moveOrCopyTargets(copy: true) })
         menu.addItem(ActionItem("Move To…") { model.moveOrCopyTargets(copy: false) })
         menu.addItem(.separator())

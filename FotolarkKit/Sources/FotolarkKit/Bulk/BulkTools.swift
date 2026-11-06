@@ -10,10 +10,19 @@ public enum BulkTools {
                                   suffix: String = "", engine: EditEngine) throws -> [UndoStep] {
         let data = try ImageExporter.encode(source: photo, recipe: recipe, options: options, engine: engine)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let target = PhotoFileOperations.availableURL(
-            for: ImageExporter.fileName(for: photo, format: options.format, suffix: suffix), in: folder)
-        try data.write(to: target)
-        return [.removeCreatedFile(target)]
+        let name = ImageExporter.fileName(for: photo, format: options.format, suffix: suffix)
+        // Several copies may be written into one folder at once, so never overwrite:
+        // if another job took the name in the meantime, try the next free one.
+        for _ in 0..<50 {
+            let target = PhotoFileOperations.availableURL(for: name, in: folder)
+            do {
+                try data.write(to: target, options: .withoutOverwriting)
+                return [.removeCreatedFile(target)]
+            } catch CocoaError.fileWriteFileExists {
+                continue
+            }
+        }
+        throw CocoaError(.fileWriteFileExists)
     }
 
     /// How a bulk resize picks the new size.

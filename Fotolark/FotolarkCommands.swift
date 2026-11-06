@@ -63,6 +63,13 @@ struct FotolarkCommands: Commands {
                 .disabled(!model.canPasteEdits)
         }
 
+        CommandMenu("Bulk") {
+            ForEach(BulkTool.allCases) { tool in
+                Button("\(tool.title)…") { model.sheet = .bulk(tool) }
+            }
+            .disabled(model.targetPhotos.isEmpty)
+        }
+
         CommandMenu("Photo") {
             Group {
                 Button("Magic Fix") { editor?.toggleAutoFix(.magicFix) }

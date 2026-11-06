@@ -26,6 +26,7 @@ struct ContentView: View {
             case .export: ExportSheet(model: model, photos: model.targetPhotos)
             case .resize: if let editor = model.editor { ResizeSheet(editor: editor) }
             case .rename: if let url = model.targetPhotos.first { RenameSheet(model: model, url: url) }
+            case .bulk(let tool): BulkSheet(model: model, photos: model.targetPhotos, tool: tool)
             }
         }
         .alert("Something went wrong", isPresented: Binding(
