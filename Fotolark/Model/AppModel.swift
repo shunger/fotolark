@@ -46,6 +46,8 @@ final class AppModel {
     let thumbnails: ThumbnailStore
     let fileOperations: PhotoFileOperations
     let library: FolderLibrary
+    let jobs = JobQueue()
+    let promises: EditedPhotoPromise
     let backupDirectory: URL
     private let dates: DateTakenCache
     private var loadGeneration = 0
@@ -60,6 +62,7 @@ final class AppModel {
         backupDirectory = support.appendingPathComponent("Backups", isDirectory: true)
         thumbnails = ThumbnailStore(diskDirectory: caches.appendingPathComponent("Thumbnails"), engine: engine)
         fileOperations = PhotoFileOperations(store: store)
+        promises = EditedPhotoPromise(engine: engine)
         library = FolderLibrary(supportDirectory: support)
         dates = DateTakenCache(fileURL: caches.appendingPathComponent("DatesTaken.json"))
         sortOrder = PhotoSortOrder(rawValue: UserDefaults.standard.string(forKey: "sortOrder") ?? "") ?? .dateTaken
@@ -67,6 +70,11 @@ final class AppModel {
         thumbnailSize = size > 0 ? size : 160
 
         library.onFoldersChanged = { [weak self] changed in self?.foldersChanged(changed) }
+        jobs.onChange = { [weak self] in self?.reloadPhotos() }
+        if let data = UserDefaults.standard.data(forKey: "export.presets"),
+           let saved = try? JSONDecoder().decode([ExportPreset].self, from: data) {
+            customPresets = saved
+        }
         if let first = library.roots.first, let url = library.resolvedURLs[first.id] {
             source = .folder(url)
             reloadPhotos()
@@ -387,6 +395,74 @@ final class AppModel {
             pasteProgress = nil
             if failed > 0 { errorMessage = "Couldn’t paste edits onto \(failed) of the photos." }
         }
+    }
+
+    // MARK: Export and share
+
+    private(set) var customPresets: [ExportPreset] = []
+    var exportPresets: [ExportPreset] { ExportPreset.builtIn + customPresets }
+
+    func saveExportPreset(_ preset: ExportPreset) {
+        customPresets.append(preset)
+        persistPresets()
+    }
+
+    func deleteExportPreset(_ id: ExportPreset.ID) {
+        customPresets.removeAll { $0.id == id }
+        persistPresets()
+    }
+
+    private func persistPresets() {
+        UserDefaults.standard.set(try? JSONEncoder().encode(customPresets), forKey: "export.presets")
+    }
+
+    /// A photo's current edits: the open editor's, or what's saved.
+    func recipe(for url: URL) -> EditRecipe {
+        if let editor, editor.url == url { editor.commitPending(); return editor.history.current }
+        return recipes[url] ?? store.load(for: url) ?? EditRecipe()
+    }
+
+    func exportOne(_ photo: URL, options: ExportOptions, to destination: URL) {
+        let recipe = recipe(for: photo)
+        let engine = engine
+        jobs.run("Export \(photo.lastPathComponent)", items: [photo], outputFolder: destination,
+                 name: { $0.lastPathComponent }) { url in
+            try ImageExporter.export(source: url, recipe: recipe, options: options, to: destination, engine: engine)
+            return [.removeCreatedFile(destination)]
+        }
+    }
+
+    func exportMany(_ photos: [URL], options: ExportOptions, to folder: URL) {
+        let recipes = Dictionary(uniqueKeysWithValues: photos.map { ($0, recipe(for: $0)) })
+        let engine = engine
+        jobs.run("Export \(photos.count) photos", items: photos, outputFolder: folder,
+                 name: { $0.lastPathComponent }) { url in
+            try BulkTools.exportCopy(of: url, recipe: recipes[url] ?? EditRecipe(), options: options,
+                                     to: folder, engine: engine)
+        }
+    }
+
+    /// Edited copies in a temporary folder, for the Share menu and dragging out.
+    /// Unedited photos are shared as they are.
+    nonisolated static func renderForSharing(_ photos: [URL], recipes: [URL: EditRecipe], engine: EditEngine) -> [URL] {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Fotolark Share", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        return photos.compactMap { url in
+            guard let recipe = recipes[url], !recipe.isEmpty else { return url }
+            return try? BulkTools.exportCopy(of: url, recipe: recipe, options: ExportOptions(format: .jpeg, quality: 0.92),
+                                             to: folder, engine: engine)
+                .compactMap { if case .removeCreatedFile(let u) = $0 { u } else { nil } }.first
+        }
+    }
+
+    func sharingItems() async -> [URL] {
+        let photos = targetPhotos
+        let recipes = Dictionary(uniqueKeysWithValues: photos.map { ($0, recipe(for: $0)) })
+        let engine = engine
+        return await Task.detached(priority: .userInitiated) {
+            Self.renderForSharing(photos, recipes: recipes, engine: engine)
+        }.value
     }
 
     // MARK: Settings

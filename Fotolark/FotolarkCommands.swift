@@ -21,7 +21,7 @@ struct FotolarkCommands: Commands {
         CommandGroup(replacing: .saveItem) {
             Button("Export…") { model.sheet = .export }
                 .keyboardShortcut("e")
-                .disabled(editor == nil)
+                .disabled(model.targetPhotos.isEmpty)
             Button("Save Over Original…") { model.isConfirmingOverwrite = true }
                 .disabled(!canSaveOver)
             Divider()

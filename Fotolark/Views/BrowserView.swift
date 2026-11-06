@@ -41,6 +41,13 @@ struct BrowserView: View {
                     .accessibilityLabel("Thumbnail size")
             }
             ToolbarItem {
+                Button("Export", systemImage: "arrow.down.doc") { model.sheet = .export }
+                    .disabled(model.targetPhotos.isEmpty)
+                    .help("Export edited copies (⌘E)")
+            }
+            ToolbarItem { ShareButton(model: model) }
+            ToolbarItem { JobsButton(model: model) }
+            ToolbarItem {
                 Button("Info", systemImage: "info.circle") { showInfo.toggle() }
                     .help("Show or hide photo details (⌘I)")
             }
@@ -64,6 +71,7 @@ struct BrowserView: View {
         } else {
             PhotoGridView(photos: model.photos, recipes: model.recipes, selection: $model.selection,
                           thumbnailSize: model.thumbnailSize, thumbnails: model.thumbnails,
+                          promises: model.promises,
                           onOpen: { model.openEditor($0) },
                           makeMenu: { FileMenu.make(model: model) })
         }

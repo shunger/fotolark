@@ -11,6 +11,7 @@ struct PhotoGridView: NSViewRepresentable {
     @Binding var selection: Set<URL>
     let thumbnailSize: CGFloat
     let thumbnails: ThumbnailStore
+    let promises: EditedPhotoPromise
     let onOpen: (URL) -> Void
     let makeMenu: () -> NSMenu
 
@@ -156,7 +157,11 @@ struct PhotoGridView: NSViewRepresentable {
 
         // Dragging a photo out copies the file (to Finder, Mail, Messages…).
         func collectionView(_ collectionView: NSCollectionView, pasteboardWriterForItemAt indexPath: IndexPath) -> NSPasteboardWriting? {
-            dataSource?.itemIdentifier(for: indexPath) as NSURL?
+            guard let url = dataSource?.itemIdentifier(for: indexPath) else { return nil }
+            if let recipe = parent.recipes[url], !recipe.isEmpty {
+                return parent.promises.provider(for: url, recipe: recipe)
+            }
+            return url as NSURL
         }
 
         func collectionView(_ collectionView: NSCollectionView, canDragItemsAt indexPaths: Set<IndexPath>, with event: NSEvent) -> Bool {

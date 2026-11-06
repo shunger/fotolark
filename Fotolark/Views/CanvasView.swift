@@ -1,5 +1,6 @@
 import FotolarkKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The photo, fitted to the window or zoomed, with the crop and straighten overlays.
 struct CanvasView: View {
@@ -79,6 +80,7 @@ struct CanvasView: View {
                 Image(decorative: cg, scale: 1)
                     .resizable()
                     .interpolation(.high)
+                    .onDrag { dragProvider() }
                     .accessibilityLabel(editor.showOriginal ? "Original photo" : "Edited photo")
             }
             switch editor.tool {
@@ -116,6 +118,22 @@ struct CanvasView: View {
             }
         }
         .frame(width: size.width, height: size.height)
+    }
+
+    /// Dragging the photo out hands over an edited JPEG copy (or the original if unedited).
+    private func dragProvider() -> NSItemProvider {
+        let url = editor.url
+        let recipe = model.recipe(for: url)
+        guard !recipe.isEmpty, editor.tool == .none else { return NSItemProvider(contentsOf: url) ?? NSItemProvider() }
+        let engine = model.engine
+        let provider = NSItemProvider()
+        provider.suggestedName = url.deletingPathExtension().lastPathComponent
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.jpeg.identifier, fileOptions: [], visibility: .all) { done in
+            let copies = AppModel.renderForSharing([url], recipes: [url: recipe], engine: engine)
+            done(copies.first, false, copies.first == nil ? CocoaError(.fileWriteUnknown) : nil)
+            return nil
+        }
+        return provider
     }
 
     /// Points per image pixel that fit the whole photo in the window.

@@ -23,7 +23,7 @@ struct ContentView: View {
         } isTargeted: { isDropTargeted = $0 }
         .sheet(item: $model.sheet) { sheet in
             switch sheet {
-            case .export: if let editor = model.editor { ExportSheet(editor: editor, model: model) }
+            case .export: ExportSheet(model: model, photos: model.targetPhotos)
             case .resize: if let editor = model.editor { ResizeSheet(editor: editor) }
             case .rename: if let url = model.targetPhotos.first { RenameSheet(model: model, url: url) }
             }
@@ -150,8 +150,10 @@ struct EditorToolbar: ToolbarContent {
             Button("Redo", systemImage: "arrow.uturn.forward") { editor.redo() }
                 .disabled(!editor.history.canRedo)
                 .help("Redo (⇧⌘Z)")
-            Button("Export", systemImage: "square.and.arrow.up") { model.sheet = .export }
+            Button("Export", systemImage: "arrow.down.doc") { model.sheet = .export }
                 .help("Export an edited copy (⌘E)")
+            ShareButton(model: model)
+            JobsButton(model: model)
             Button("Inspector", systemImage: "sidebar.right") { showInspector.toggle() }
                 .help("Show or hide the editing panel (⌥⌘I)")
         }

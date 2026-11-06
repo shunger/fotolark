@@ -10,7 +10,7 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             FoldersSettings(model: model)
                 .tabItem { Label("Folders", systemImage: "folder") }
-            ExportSettings()
+            ExportSettings(model: model)
                 .tabItem { Label("Export", systemImage: "square.and.arrow.up") }
         }
         .frame(width: 480)
@@ -70,6 +70,8 @@ private struct FoldersSettings: View {
 }
 
 private struct ExportSettings: View {
+    @Bindable var model: AppModel
+    @AppStorage("export.metadata") private var metadata: MetadataPolicy = .keepAll
     @AppStorage("export.format") private var format: ExportFormat = .jpeg
     @AppStorage("export.quality") private var quality = 0.9
     @AppStorage("export.colorSpace") private var colorSpace: ExportColorSpace = .sRGB
@@ -87,6 +89,22 @@ private struct ExportSettings: View {
             }
             Picker("Default color", selection: $colorSpace) {
                 ForEach(ExportColorSpace.allCases) { Text($0.displayName).tag($0) }
+            }
+            Picker("Photo details", selection: $metadata) {
+                ForEach(MetadataPolicy.allCases) { Text($0.displayName).tag($0) }
+            }
+            Section("Your presets") {
+                if model.customPresets.isEmpty {
+                    Text("Use “Save as Preset…” in the Export window to add your own.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(model.customPresets) { preset in
+                    HStack {
+                        Text(preset.name)
+                        Spacer()
+                        Button("Delete") { model.deleteExportPreset(preset.id) }
+                    }
+                }
             }
         }
     }
