@@ -86,3 +86,31 @@ struct ImportTests {
         #expect(!placed.verified, "a copy that doesn't match must never allow deleting the original")
     }
 }
+
+@Suite("HEIC from devices that report odd types")
+struct DeviceTypeTests {
+    @Test func heicIsRecognizedByNameOrContents() throws {
+        for uti in [nil, "public.image", "public.data", "com.example.unknown", "public.heic"] as [String?] {
+            let c = ImportCandidate(id: "1", name: "IMG_1.HEIC", fileSize: 0, date: nil, typeIdentifier: uti)
+            #expect(c.isHEIC, "\(uti ?? "nil")")
+            #expect(c.isPhoto, "\(uti ?? "nil")")
+        }
+        let jpg = ImportCandidate(id: "2", name: "IMG_2.JPG", fileSize: 0, date: nil, typeIdentifier: "public.image")
+        #expect(!jpg.isHEIC && jpg.isPhoto)
+    }
+
+    @Test func convertsHEICEvenWhenTheDeviceDidNotSaySo() throws {
+        let dir = try makeTempDirectory()
+        let downloaded = dir.appendingPathComponent("dl.heic")
+        try writePhoto(Grid.numbered(width: 5, height: 4), to: downloaded, type: .heic)
+        // Name without .heic and a vague type: only the contents say it's HEIC.
+        let c = ImportCandidate(id: "x", name: "IMG_7.photo", fileSize: 0, date: nil, typeIdentifier: "public.data")
+        var options = ImportOptions()
+        options.convertHEICToJPEG = true
+        options.keepHEICOriginal = true
+        let placed = try Importer.place(downloaded, candidate: c, index: 0, options: options,
+                                        root: dir.appendingPathComponent("Out"), engine: testEngine)
+        #expect(placed.files.map(\.pathExtension) == ["jpg", "photo"])
+        #expect(placed.verified)
+    }
+}

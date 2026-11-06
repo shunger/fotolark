@@ -205,7 +205,7 @@ struct ImportView: View {
                 Button {
                     if deleteAfter { confirmingDelete = true } else { start() }
                 } label: {
-                    Text(chosen.count == 1 ? "Import 1 Photo" : "Import \(chosen.count) Photos").frame(maxWidth: .infinity)
+                    Text(importTitle).frame(maxWidth: .infinity)
                 }
                 .controlSize(.large)
                 .buttonStyle(.borderedProminent)
@@ -214,9 +214,22 @@ struct ImportView: View {
                 if destination == nil {
                     Text("Choose where the photos go.").font(.caption).foregroundStyle(.secondary)
                 }
+                if !selection.isEmpty {
+                    HStack {
+                        Text("Only the \(selection.count) photos you clicked are imported.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("Select None") { selection = [] }.controlSize(.small)
+                    }
+                }
             }
             .padding(16)
         }
+    }
+
+    private var importTitle: String {
+        let n = chosen.count
+        if selection.isEmpty { return n == 1 ? "Import 1 Photo" : "Import All \(n.formatted()) Photos" }
+        return n == 1 ? "Import 1 Selected Photo" : "Import \(n.formatted()) Selected Photos"
     }
 
     private func chooseDestination() {

@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UniformTypeIdentifiers
 
 /// A photo on a phone, camera, card or drive that could be imported.
@@ -19,8 +20,15 @@ public struct ImportCandidate: Hashable, Identifiable, Sendable {
         self.typeIdentifier = typeIdentifier
     }
 
+    /// The type the device reported, unless it's vague or unknown (devices differ), in
+    /// which case the file name's extension decides.
     var type: UTType? {
-        typeIdentifier.flatMap(UTType.init) ?? UTType(filenameExtension: (name as NSString).pathExtension)
+        let byName = UTType(filenameExtension: (name as NSString).pathExtension)
+        guard let reported = typeIdentifier.flatMap(UTType.init),
+              reported.conforms(to: .image) || reported.conforms(to: .audiovisualContent) else { return byName }
+        // A generic "image" from the device says less than a .HEIC or .JPG name does.
+        if reported == .image, let byName, byName.conforms(to: .image) { return byName }
+        return reported
     }
 
     /// Still photos are imported; videos and Live Photo clips arrive in Phase 3.
@@ -38,6 +46,8 @@ public struct ImportCandidate: Hashable, Identifiable, Sendable {
     public var baseName: String { (name as NSString).deletingPathExtension.lowercased() }
 
     public var isHEIC: Bool {
+        let ext = (name as NSString).pathExtension.lowercased()
+        if ext == "heic" || ext == "heif" { return true }
         guard let type else { return false }
         return type.conforms(to: .heic) || type.conforms(to: .heif)
     }
@@ -137,7 +147,7 @@ public enum Importer {
             let size = (try? target.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
             return Placed(files: [target], verified: c.fileSize <= 0 || size == c.fileSize, undo: [.removeCreatedFile(target)])
         }
-        if options.convertHEICToJPEG && c.isHEIC {
+        if options.convertHEICToJPEG && (c.isHEIC || isHEICFile(downloaded)) {
             let jpeg = try ImageExporter.encode(source: downloaded, recipe: EditRecipe(),
                                                 options: ExportOptions(format: .jpeg, quality: options.jpegQuality),
                                                 engine: engine)
@@ -193,4 +203,11 @@ extension Importer {
         }
         return (shown, clips)
     }
+}
+
+/// True when the file's contents are HEIC/HEIF, whatever the device said about it.
+func isHEICFile(_ url: URL) -> Bool {
+    guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let id = CGImageSourceGetType(src) as String?, let type = UTType(id) else { return false }
+    return type.conforms(to: .heic) || type.conforms(to: .heif)
 }
