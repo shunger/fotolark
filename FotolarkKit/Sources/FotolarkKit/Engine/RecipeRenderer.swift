@@ -22,6 +22,7 @@ public enum RecipeRenderer {
         case .autoContrast(let levels): applyLevels(levels, to: image)
         case .autoColor(let gains): applyGains(gains, to: image)
         case .whiteBalance(let gains): applyGains(gains, to: image)
+        case .redEye(let spots): applyRedEye(spots, to: image)
         case .adjust(let a): applyAdjustments(a, to: image)
         case .levels(let l): applyLookupCurves(red: l.value, green: l.value, blue: l.value, to: image)
         case .curves(let c):
@@ -210,6 +211,34 @@ public enum RecipeRenderer {
         }
 
         return out.cropped(to: image.extent)
+    }
+
+    // MARK: Red eye
+
+    /// Inside each spot, red is pulled down to the level of green and blue, which turns a
+    /// red pupil dark without touching the rest of the eye.
+    static func applyRedEye(_ spots: [EyeSpot], to image: CIImage) -> CIImage {
+        let e = image.extent
+        let longest = max(e.width, e.height)
+        var mask: CIImage?
+        for spot in spots {
+            let r = spot.radius * longest
+            let g = CIFilter.radialGradient()
+            g.center = CGPoint(x: e.minX + spot.x * e.width, y: e.maxY - spot.y * e.height)
+            g.radius0 = Float(r * 0.7)
+            g.radius1 = Float(r * 1.1)
+            g.color0 = CIColor(red: 1, green: 1, blue: 1, alpha: 1)
+            g.color1 = CIColor(red: 1, green: 1, blue: 1, alpha: 0)
+            guard let one = g.outputImage else { continue }
+            mask = mask.map { one.composited(over: $0) } ?? one
+        }
+        guard let mask else { return image }
+        let half = CIVector(x: 0, y: 0.5, z: 0.5, w: 0)
+        let noRed = image.applyingFilter("CIColorMatrix", parameters: ["inputRVector": half])
+        let fixed = image.applyingFilter("CIMinimumCompositing", parameters: [kCIInputBackgroundImageKey: noRed])
+        return fixed.applyingFilter("CIBlendWithAlphaMask", parameters: [
+            kCIInputBackgroundImageKey: image, kCIInputMaskImageKey: mask.cropped(to: e),
+        ]).cropped(to: e)
     }
 
     // MARK: Lookup tables

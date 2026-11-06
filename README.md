@@ -23,7 +23,7 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
 
 - Phase 3 (retouch and creative), in batches:
   1. RAW, noise reduction, curves, levels, HSL color ranges: **built**
-  2. Auto-straighten, auto-crop, red-eye removal
+  2. Auto-straighten, auto-crop, red-eye removal: **built**
   3. Spot heal, clone stamp, soften skin
   4. Looks with strength, focal B&W, custom presets, text, watermark
   5. Compare view

@@ -11,6 +11,8 @@ public enum EditOperation: Equatable, Sendable {
     case autoColor(ChannelGains)
     /// Neutral point picked by clicking something that should be gray.
     case whiteBalance(ChannelGains)
+    /// Red eyes fixed, as spots on the original photo.
+    case redEye([EyeSpot])
     /// Light and color sliders.
     case adjust(Adjustments)
     /// Input and output levels.
@@ -31,7 +33,7 @@ public enum EditOperation: Equatable, Sendable {
 
     /// The kind of an operation; a recipe holds at most one operation of each kind.
     public enum Kind: String, Codable, CaseIterable, Sendable, Comparable {
-        case magicFix, autoContrast, autoColor, whiteBalance, adjust, levels, curves, colorRanges, orient, straighten, crop, resize
+        case magicFix, autoContrast, autoColor, whiteBalance, redEye, adjust, levels, curves, colorRanges, orient, straighten, crop, resize
 
         /// Canonical position in a recipe: tone and color first, then geometry, then size.
         var order: Int { Kind.allCases.firstIndex(of: self)! }
@@ -52,6 +54,7 @@ public enum EditOperation: Equatable, Sendable {
         case .autoContrast: .autoContrast
         case .autoColor: .autoColor
         case .whiteBalance: .whiteBalance
+        case .redEye: .redEye
         case .adjust: .adjust
         case .levels: .levels
         case .curves: .curves
@@ -70,6 +73,7 @@ public enum EditOperation: Equatable, Sendable {
         case .autoContrast(let levels): levels == .identity
         case .autoColor(let gains): gains == .identity
         case .whiteBalance(let gains): gains == .identity
+        case .redEye(let spots): spots.isEmpty
         case .adjust(let adjustments): adjustments == Adjustments()
         case .levels(let l): l.isIdentity
         case .curves(let c): c.isIdentity
@@ -97,6 +101,7 @@ extension EditOperation: Codable {
         case .autoContrast: self = .autoContrast(try c.decode(Levels.self, forKey: .value))
         case .autoColor: self = .autoColor(try c.decode(ChannelGains.self, forKey: .value))
         case .whiteBalance: self = .whiteBalance(try c.decode(ChannelGains.self, forKey: .value))
+        case .redEye: self = .redEye(try c.decode([EyeSpot].self, forKey: .value))
         case .adjust: self = .adjust(try c.decode(Adjustments.self, forKey: .value))
         case .levels: self = .levels(try c.decode(ToneLevels.self, forKey: .value))
         case .curves: self = .curves(try c.decode(Curves.self, forKey: .value))
@@ -116,6 +121,7 @@ extension EditOperation: Codable {
         case .autoContrast(let v): try c.encode(v, forKey: .value)
         case .autoColor(let v): try c.encode(v, forKey: .value)
         case .whiteBalance(let v): try c.encode(v, forKey: .value)
+        case .redEye(let v): try c.encode(v, forKey: .value)
         case .adjust(let v): try c.encode(v, forKey: .value)
         case .levels(let v): try c.encode(v, forKey: .value)
         case .curves(let v): try c.encode(v, forKey: .value)
@@ -341,5 +347,19 @@ public enum FilterValue: Codable, Equatable, Sendable {
         case .number(let n): try c.encode(n)
         case .vector(let v): try c.encode(v)
         }
+    }
+}
+
+/// A round spot on the original photo (normalized, top-left origin). The radius is a
+/// fraction of the photo's longest side.
+public struct EyeSpot: Codable, Equatable, Hashable, Sendable {
+    public var x: Double
+    public var y: Double
+    public var radius: Double
+
+    public init(x: Double, y: Double, radius: Double) {
+        self.x = x
+        self.y = y
+        self.radius = radius
     }
 }

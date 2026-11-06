@@ -99,6 +99,30 @@ struct CanvasView: View {
                 CropOverlay(rect: $editor.cropDraft, aspect: editor.normalizedCropAspect)
             case .straighten:
                 GridOverlay(divisions: 8)
+            case .redEye:
+                GeometryReader { geo in
+                    let longest = max(geo.size.width, geo.size.height)
+                    ZStack {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture(coordinateSpace: .local) { location in
+                                editor.addRedEye(atDisplayPoint: CGPoint(x: location.x / geo.size.width,
+                                                                         y: location.y / geo.size.height))
+                            }
+                            .onContinuousHover { phase in
+                                if case .active = phase { NSCursor.crosshair.set() } else { NSCursor.arrow.set() }
+                            }
+                        ForEach(Array(editor.redEyeDisplaySpots.enumerated()), id: \.offset) { _, spot in
+                            Circle()
+                                .strokeBorder(Color.white, lineWidth: 1.5)
+                                .shadow(color: .black.opacity(0.6), radius: 1)
+                                .frame(width: spot.radius * longest * 2.4, height: spot.radius * longest * 2.4)
+                                .position(x: spot.center.x * geo.size.width, y: spot.center.y * geo.size.height)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                }
+                .accessibilityLabel("Click a red eye to fix it")
             case .whiteBalance:
                 GeometryReader { geo in
                     Color.clear

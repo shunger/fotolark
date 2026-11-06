@@ -13,7 +13,7 @@ struct SendableImage: @unchecked Sendable {
 /// and saves the recipe to the sidecar file.
 @MainActor @Observable
 final class PhotoEditor {
-    enum Tool { case none, crop, straighten, whiteBalance }
+    enum Tool { case none, crop, straighten, whiteBalance, redEye }
 
     /// Longest side of the copy used while editing; full resolution is loaded only for
     /// close-up zoom and export.
@@ -31,8 +31,16 @@ final class PhotoEditor {
     private(set) var histogram: Histogram?
     /// Shown in the panel when a white balance click couldn't be used.
     var whiteBalanceMessage: String?
+    /// Result of the last automatic fix that might not find anything (horizon, subject, red eyes).
+    var toolMessage: String?
 
-    var tool: Tool = .none { didSet { if tool != oldValue { scheduleRender() } } }
+    var tool: Tool = .none {
+        didSet {
+            guard tool != oldValue else { return }
+            toolMessage = nil
+            scheduleRender()
+        }
+    }
     var showOriginal = false { didSet { if showOriginal != oldValue { scheduleRender() } } }
     /// Set by the canvas: how many pixels across the photo is drawn on screen.
     var displayPixelsNeeded = 0 { didSet { if needsFullResolution != previewIsFullResolution { scheduleRender() } } }
@@ -229,6 +237,92 @@ final class PhotoEditor {
             whiteBalanceMessage = nil
             tool = .none
             apply(recipe.setting(.whiteBalance(gains)), label: "White balance")
+        }
+    }
+
+    // MARK: Auto-straighten and auto-crop
+
+    func autoStraighten() {
+        guard let proxy else { return }
+        let turned = SendableImage(image: RecipeRenderer.apply(
+            EditRecipe(operations: recipe.operations.filter { $0.kind == .orient }), to: proxy.image))
+        let engine = engine
+        isBusy = true
+        Task {
+            let degrees = await Task.detached(priority: .userInitiated) { engine.horizonStraightening(for: turned.image) }.value
+            isBusy = false
+            if let degrees {
+                toolMessage = String(format: "Straightened by %+.1f°.", degrees)
+                apply(recipe.setting(.straighten(degrees: degrees)), label: "Auto-straighten")
+            } else {
+                toolMessage = "Fotolark couldn’t find a clear horizon in this photo. Use the slider instead."
+            }
+        }
+    }
+
+    /// Suggests a crop around the main subject (while the crop tool is open).
+    func suggestCrop() {
+        guard let proxy else { return }
+        let uncropped = SendableImage(image: RecipeRenderer.apply(recipe.removing(.crop).withoutResize, to: proxy.image))
+        let engine = engine
+        isBusy = true
+        Task {
+            let crop = await Task.detached(priority: .userInitiated) { engine.suggestedCrop(for: uncropped.image) }.value
+            isBusy = false
+            if let crop {
+                cropAspect = .free
+                cropDraft = crop
+                toolMessage = "Suggested a crop around the main subject. Adjust it or press Apply."
+            } else {
+                toolMessage = "The subject already fills the photo, so there's nothing to crop."
+            }
+        }
+    }
+
+    // MARK: Red eye
+
+    /// Opens the red-eye tool and fixes any red eyes Vision can find.
+    func beginRedEye() {
+        commitPending()
+        tool = .redEye
+        toolMessage = "Looking for red eyes…"
+        guard let proxy else { return }
+        let source = SendableImage(image: RecipeRenderer.apply(recipe.prefix(before: .redEye), to: proxy.image))
+        let engine = engine
+        Task {
+            let found = await Task.detached(priority: .userInitiated) { engine.detectRedEyes(in: source.image) }.value
+            guard tool == .redEye else { return }
+            if found.isEmpty {
+                toolMessage = "No red eyes found. Click any red eye in the photo to fix it."
+            } else {
+                apply(recipe.setting(.redEye(redEyeSpots + found)), label: "Red-eye")
+                toolMessage = "Fixed \(found.count) red \(found.count == 1 ? "eye" : "eyes"). Click any others to fix them too."
+            }
+        }
+    }
+
+    var redEyeSpots: [EyeSpot] {
+        if case .redEye(let spots) = recipe.operation(.redEye) { return spots }
+        return []
+    }
+
+    /// Fixes a red eye where the person clicked (a point on the photo as shown).
+    func addRedEye(atDisplayPoint point: CGPoint) {
+        let source = PointMapping.sourcePoint(fromDisplay: point, recipe: shownRecipe, sourceSize: info.pixelSize)
+        let spot = EyeSpot(x: source.x, y: source.y, radius: 0.012)
+        apply(recipe.setting(.redEye(redEyeSpots + [spot])), label: "Red-eye")
+    }
+
+    /// Where the fixed eyes are on screen, for drawing circles around them.
+    var redEyeDisplaySpots: [(center: CGPoint, radius: Double)] {
+        let shown = shownSize
+        let source = info.pixelSize
+        return redEyeSpots.compactMap { spot in
+            guard let p = PointMapping.displayPoint(fromSource: CGPoint(x: spot.x, y: spot.y), recipe: shownRecipe,
+                                                    sourceSize: source) else { return nil }
+            // Radius as a fraction of the shown photo's longest side.
+            let r = spot.radius * Double(max(source.width, source.height)) / Double(max(shown.width, shown.height))
+            return (p, r)
         }
     }
 

@@ -13,6 +13,7 @@ struct InspectorView: View {
                 case .crop: CropPanel(editor: editor)
                 case .straighten: StraightenPanel(editor: editor)
                 case .whiteBalance: WhiteBalancePanel(editor: editor)
+                case .redEye: RedEyePanel(editor: editor)
                 case .none: mainPanels
                 }
             }
@@ -48,6 +49,10 @@ struct InspectorView: View {
                 } else {
                     editor.beginWhiteBalance()
                 }
+            }
+            FixButton(title: "Red-eye", systemImage: "eye", isOn: editor.has(.redEye),
+                      help: "Finds and fixes red eyes from the camera flash; click any it misses") {
+                editor.beginRedEye()
             }
             SliderRow(editor: editor, title: "Fill light", key: \.fillLight, range: 0...1, format: "%.0f")
         }
@@ -284,7 +289,14 @@ struct CropPanel: View {
                 .pickerStyle(.segmented)
             }
 
-            Button("Reset crop") { editor.cropDraft = .full; editor.cropAspect = .free }
+            HStack {
+                Button("Suggest Crop") { editor.suggestCrop() }
+                    .help("Frames the main subject, keeping the photo's shape")
+                Button("Reset") { editor.cropDraft = .full; editor.cropAspect = .free }
+            }
+            if let message = editor.toolMessage {
+                Text(message).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
 
             HStack {
                 Button("Cancel", role: .cancel) { editor.cancelCrop() }
@@ -310,6 +322,11 @@ struct StraightenPanel: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Button("Auto-Straighten") { editor.autoStraighten() }
+                .help("Levels the horizon automatically")
+            if let message = editor.toolMessage {
+                Text(message).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Text("Angle")
                 Spacer()
@@ -418,6 +435,30 @@ struct DisclosureSection<Content: View>: View {
             content.padding(.top, 6)
         } label: {
             Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+        }
+    }
+}
+
+/// Shown while the red-eye tool is open.
+struct RedEyePanel: View {
+    @Bindable var editor: PhotoEditor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Red-eye").font(.headline)
+            Text(editor.toolMessage ?? "Click a red eye in the photo to fix it.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !editor.redEyeSpots.isEmpty {
+                Button("Remove All Red-Eye Fixes") {
+                    editor.apply(editor.recipe.removing(.redEye), label: "Remove red-eye")
+                }
+            }
+            Button("Done") { editor.tool = .none }
+                .keyboardShortcut(.defaultAction)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 }
