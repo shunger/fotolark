@@ -30,6 +30,12 @@ struct FotolarkCommands: Commands {
             Button("Export…") { model.sheet = .export }
                 .keyboardShortcut("e")
                 .disabled(model.targetPhotos.isEmpty)
+            Button("Export as PDF…") { model.showPages(.pdf) }
+                .disabled(model.layoutPhotos.isEmpty)
+            Button("Make Contact Sheet…") { model.showPages(.contactSheet) }
+                .disabled(model.layoutPhotos.isEmpty)
+            Button("Make Collage…") { model.showCollage() }
+                .disabled(model.layoutPhotos.isEmpty)
             Button("Remove Background…") { model.removeBackground() }
                 .disabled(model.targetPhotos.isEmpty)
             Button("Save Over Original…") { model.isConfirmingOverwrite = true }
@@ -52,6 +58,12 @@ struct FotolarkCommands: Commands {
                 .keyboardShortcut(.delete)
                 // Off while a sheet is open, so ⌘⌫ in a text field never trashes a photo.
                 .disabled(model.targetPhotos.isEmpty || model.sheet != nil)
+        }
+
+        CommandGroup(replacing: .printItem) {
+            Button("Print…") { model.showPages(.print) }
+                .keyboardShortcut("p")
+                .disabled(model.layoutPhotos.isEmpty)
         }
 
         CommandGroup(replacing: .undoRedo) {

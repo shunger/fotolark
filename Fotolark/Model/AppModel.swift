@@ -339,6 +339,8 @@ final class AppModel {
         /// Name a new album; the photos go into it.
         case newAlbum([URL])
         case renameAlbum(Album.ID)
+        case pages(PageSheet.Mode, [URL])
+        case collage([URL])
 
         var id: String {
             switch self {
@@ -348,6 +350,8 @@ final class AppModel {
             case .bulk: "bulk"
             case .newAlbum: "newAlbum"
             case .renameAlbum: "renameAlbum"
+            case .pages(let mode, _): "pages-\(mode.rawValue)"
+            case .collage: "collage"
             }
         }
     }
@@ -852,6 +856,37 @@ final class AppModel {
         albumStore.delete(id)
         albums = albumStore.albums
         if case .album(id) = source { source = nil }
+    }
+
+    // MARK: Print, contact sheets, collages and PDFs
+
+    /// The selected photos, or every photo shown when none are selected.
+    var layoutPhotos: [URL] {
+        let targets = targetPhotos
+        return targets.isEmpty ? photos.map(\.url) : targets
+    }
+
+    func showPages(_ mode: PageSheet.Mode) {
+        let list = layoutPhotos
+        guard !list.isEmpty else { return }
+        sheet = .pages(mode, list)
+    }
+
+    func showCollage() {
+        let list = layoutPhotos
+        guard !list.isEmpty else { return }
+        sheet = .collage(Array(list.prefix(60)))
+    }
+
+    /// The folder, album or search shown, for names of PDFs and collages.
+    var sourceTitle: String {
+        switch source {
+        case .folder(let url): url.lastPathComponent
+        case .album: currentAlbum?.name ?? "Album"
+        case .timeline: "All Photos"
+        case .search(let text): text
+        default: editor?.url.deletingPathExtension().lastPathComponent ?? "Photos"
+        }
     }
 
     // MARK: Remove background

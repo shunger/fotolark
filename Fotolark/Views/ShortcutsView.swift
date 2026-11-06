@@ -44,6 +44,7 @@ struct ShortcutsView: View {
             ("⌘Z, ⇧⌘Z", "Undo, redo"),
             ("⇧⌘C, ⇧⌘V", "Copy edits, paste edits"),
             ("⌘E", "Export"),
+            ("⌘P", "Print (the selected photos, or all shown)"),
         ]),
         Group(id: "While cropping", items: [
             ("Arrow keys", "Move the crop"),

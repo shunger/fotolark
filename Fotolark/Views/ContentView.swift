@@ -29,6 +29,8 @@ struct ContentView: View {
             case .bulk(let tool): BulkSheet(model: model, photos: model.targetPhotos, tool: tool)
             case .newAlbum(let photos): AlbumNameSheet(model: model, photos: photos)
             case .renameAlbum(let id): AlbumNameSheet(model: model, renaming: id)
+            case .pages(let mode, let photos): PageSheet(model: model, photos: photos, mode: mode)
+            case .collage(let photos): CollageSheet(model: model, photos: photos)
             }
         }
         .alert("Something went wrong", isPresented: Binding(

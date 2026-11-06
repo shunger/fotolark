@@ -30,14 +30,15 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
   5. Compare view: **built**
   6. Live Photos and video import, bulk metadata, bulk auto-fix/preset: **built**
 
-- Phase 4 (organize and print): in progress. Batches:
+- Phase 4 (organize and print): built; waiting on the "a month of daily use; feature
+  list re-checked" gate. Batches:
   1. Star ratings, pick/reject flags, tags (optionally saved into the files), albums: **built**
   2. Library index, search (including text in photos), filters, timeline: **built**
   3. Slideshow: **built**
   4. Brush and gradient adjustments, tilt-shift, lens correction: **built**
   5. Object removal, background blur, remove background: **built**
   6. Borders and frames, shapes and arrows, versions: **built**
-  7. Print, contact sheet, collage, PDF
+  7. Print, contact sheet, collage, PDF: **built**
 
 ## Build and test
 

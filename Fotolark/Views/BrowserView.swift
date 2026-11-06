@@ -214,6 +214,8 @@ enum FileMenu {
             bulk.submenu?.addItem(ActionItem("\(tool.title)…") { model.sheet = .bulk(tool) })
         }
         menu.addItem(bulk)
+        menu.addItem(ActionItem("Print…") { model.showPages(.print) })
+        menu.addItem(ActionItem("Make Collage…", enabled: count > 1) { model.showCollage() })
         menu.addItem(ActionItem(count == 1 ? "Remove Background…" : "Remove Background from \(count) Photos…") {
             model.removeBackground()
         })
