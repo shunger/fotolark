@@ -44,7 +44,7 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
   1. Find duplicates (identical and look-alike), face grouping and People: **built**
   2. Apple Photos: import albums or dates to folders; open, edit and save back: **built**
   3. Watch folders, Finder Services, Shortcuts actions: **built**
-  4. Help and first-run tour
+  4. Help and first-run tour: **built**
   5. App Store readiness: privacy manifest, required settings, release checklist
 
 ## Build and test

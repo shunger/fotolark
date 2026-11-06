@@ -13,8 +13,12 @@ struct FotolarkCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .help) {
+            Button("Fotolark Help") { openWindow(id: "help") }
+                .keyboardShortcut("?")
             Button("Keyboard Shortcuts") { openWindow(id: "shortcuts") }
                 .keyboardShortcut("/")
+            Divider()
+            Button("Welcome Tour") { model.sheet = .welcome }
         }
 
         CommandGroup(replacing: .newItem) {

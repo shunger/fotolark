@@ -59,6 +59,7 @@ struct ShortcutsView: View {
             ("⌥⌘I", "Show or hide the editing panel"),
             ("⌃⌘F", "Full screen"),
             ("⌘/", "This list"),
+            ("⌘?", "Fotolark Help"),
         ]),
     ]
 

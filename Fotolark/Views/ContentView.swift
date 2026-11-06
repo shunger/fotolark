@@ -32,6 +32,7 @@ struct ContentView: View {
             case .pages(let mode, let photos): PageSheet(model: model, photos: photos, mode: mode)
             case .collage(let photos): CollageSheet(model: model, photos: photos)
             case .duplicates(let photos): DuplicatesSheet(model: model, photos: photos)
+            case .welcome: WelcomeTour(model: model)
             }
         }
         .alert("Something went wrong", isPresented: Binding(

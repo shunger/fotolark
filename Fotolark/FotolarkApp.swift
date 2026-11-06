@@ -19,6 +19,10 @@ struct FotolarkApp: App {
             SettingsView(model: model)
         }
 
+        Window("Fotolark Help", id: "help") {
+            HelpView()
+        }
+
         Window("Keyboard Shortcuts", id: "shortcuts") {
             ShortcutsView()
         }

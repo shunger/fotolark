@@ -133,6 +133,7 @@ final class AppModel {
         }
         scheduleReindex(after: .seconds(1))
         recomputeFaceGroups()
+        if !UserDefaults.standard.bool(forKey: "hasSeenWelcomeTour") { sheet = .welcome }
     }
 
     // MARK: Opening
@@ -360,6 +361,7 @@ final class AppModel {
         case pages(PageSheet.Mode, [URL])
         case collage([URL])
         case duplicates([ScannedPhoto])
+        case welcome
 
         var id: String {
             switch self {
@@ -372,6 +374,7 @@ final class AppModel {
             case .pages(let mode, _): "pages-\(mode.rawValue)"
             case .collage: "collage"
             case .duplicates: "duplicates"
+            case .welcome: "welcome"
             }
         }
     }
