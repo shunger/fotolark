@@ -24,6 +24,8 @@ final class FolderLibrary {
 
     /// Called (on the main actor) with the folders that changed on disk.
     var onFoldersChanged: ((Set<URL>) -> Void)?
+    /// Called when a folder is added or removed.
+    var onRootsChanged: (() -> Void)?
 
     private let saveURL: URL
     private var watcher: FolderWatcher?
@@ -61,6 +63,7 @@ final class FolderLibrary {
         persist()
         rescan(root.id)
         restartWatcher()
+        onRootsChanged?()
         return url
     }
 
@@ -71,6 +74,7 @@ final class FolderLibrary {
         roots.removeAll { $0.id == id }
         persist()
         restartWatcher()
+        onRootsChanged?()
     }
 
     func name(of root: Root) -> String {

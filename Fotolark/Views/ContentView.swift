@@ -94,6 +94,8 @@ struct ContentView: View {
         case .folder(let url): return url.lastPathComponent
         case .opened: return "Opened Photos"
         case .album: return model.currentAlbum?.name ?? "Album"
+        case .timeline: return "All Photos"
+        case .search(let text): return "Search: \(text)"
         case .importing(let key): return model.importSource(for: key)?.title ?? "Import"
         case nil: return "Fotolark"
         }

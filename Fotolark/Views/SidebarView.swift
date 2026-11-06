@@ -13,6 +13,17 @@ struct SidebarView: View {
             model.closeEditor()
             model.source = newValue
         })) {
+            Section("Library") {
+                Label("All Photos", systemImage: "calendar")
+                    .badge(model.index.count)
+                    .tag(AppModel.Source.timeline)
+                    .help("Every photo in your folders, by month")
+                if case .search(let text) = model.source {
+                    Label("“\(text)”", systemImage: "magnifyingglass")
+                        .tag(AppModel.Source.search(text))
+                }
+            }
+
             Section("Import") {
                 ForEach(model.allImportSources, id: \.importKey) { source in
                     Label(source.title, systemImage: source.systemImage)
@@ -108,6 +119,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .searchable(text: $model.searchText, placement: .sidebar, prompt: "Search all photos")
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Button {
@@ -120,6 +132,17 @@ struct SidebarView: View {
                 if library.isScanning { ProgressView().controlSize(.small) }
             }
             .padding(10)
+            .overlay(alignment: .top) {
+                if let status = model.indexStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 10)
+                        .offset(y: -14)
+                        .help("Fotolark reads text in photos (signs, documents, screenshots) so search can find it. Turn this off in Settings.")
+                }
+            }
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 230, max: 360)
     }

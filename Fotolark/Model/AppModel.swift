@@ -17,14 +17,27 @@ final class AppModel {
         case importing(String)
         /// An album's photos, from any folders.
         case album(Album.ID)
+        /// Every photo in the watched folders, by month.
+        case timeline
+        /// Photos in the watched folders matching the search.
+        case search(String)
     }
 
     var source: Source? {
         didSet { if source != oldValue { comparing = nil; selection = []; reloadPhotos() } }
     }
 
-    /// Photos of the current source, in the chosen order.
+    /// Photos of the current source, in the chosen order, after the filter.
     private(set) var photos: [ScannedPhoto] = []
+    /// Before the filter.
+    private var loadedPhotos: [ScannedPhoto] = []
+    /// Month groups for the timeline; nil elsewhere.
+    private(set) var sections: [GridSection]?
+    /// Show only some photos (by stars, flag or tag).
+    var filter = GridFilter() {
+        didSet { if filter != oldValue { applyFilter() } }
+    }
+    var loadedCount: Int { loadedPhotos.count }
     private(set) var openedPhotos: [URL] = []
     var selection: Set<URL> = []
     /// Edits of the photos on screen, for thumbnails.
@@ -38,7 +51,9 @@ final class AppModel {
     var sortOrder: PhotoSortOrder {
         didSet {
             UserDefaults.standard.set(sortOrder.rawValue, forKey: "sortOrder")
-            photos = sortOrder.sorted(photos, dates: dates.dates(for: photos))
+            guard source?.isFolderLike ?? false else { return }
+            loadedPhotos = sortOrder.sorted(loadedPhotos, dates: dates.dates(for: loadedPhotos))
+            applyFilter()
         }
     }
 
@@ -56,6 +71,12 @@ final class AppModel {
     let devices = DeviceBrowser()
     let importHistory: ImportHistory
     let albumStore: AlbumStore
+    let index: LibraryIndex
+    /// What the background indexer is doing, for the sidebar.
+    private(set) var indexStatus: String?
+    private var indexTask: Task<Void, Never>?
+    private var textTask: Task<Void, Never>?
+    private var reindexTask: Task<Void, Never>?
     /// The albums, kept in step with `albumStore` for the sidebar.
     private(set) var albums: [Album] = []
     private(set) var folderImports: [FolderImportSource] = []
@@ -80,11 +101,13 @@ final class AppModel {
         importHistory = ImportHistory(fileURL: support.appendingPathComponent("ImportHistory.json"))
         albumStore = AlbumStore(fileURL: support.appendingPathComponent("Albums.json"))
         albums = albumStore.albums
+        index = LibraryIndex(fileURL: caches.appendingPathComponent("LibraryIndex.json"))
         sortOrder = PhotoSortOrder(rawValue: UserDefaults.standard.string(forKey: "sortOrder") ?? "") ?? .dateTaken
         let size = UserDefaults.standard.double(forKey: "thumbnailSize")
         thumbnailSize = size > 0 ? size : 160
 
         library.onFoldersChanged = { [weak self] changed in self?.foldersChanged(changed) }
+        library.onRootsChanged = { [weak self] in self?.scheduleReindex(after: .milliseconds(200)) }
         jobs.onChange = { [weak self] in self?.reloadPhotos() }
         if let data = UserDefaults.standard.data(forKey: "export.presets"),
            let saved = try? JSONDecoder().decode([ExportPreset].self, from: data) {
@@ -94,6 +117,7 @@ final class AppModel {
             source = .folder(url)
             reloadPhotos()
         }
+        scheduleReindex(after: .seconds(1))
     }
 
     // MARK: Opening
@@ -152,6 +176,8 @@ final class AppModel {
         let generation = loadGeneration
         guard let source, source.isBrowsable else {
             photos = []
+            loadedPhotos = []
+            sections = nil
             completion?()
             return
         }
@@ -159,6 +185,7 @@ final class AppModel {
         let opened = openedPhotos
         let store = store
         let albumStore = albumStore
+        let index = index
         Task {
             let (found, records) = await Task.detached(priority: .userInitiated) { () -> ([ScannedPhoto], [URL: PhotoRecord]) in
                 let found: [ScannedPhoto]
@@ -166,6 +193,8 @@ final class AppModel {
                 case .folder(let url): found = PhotoScanner.photos(in: url)
                 case .opened: found = opened.compactMap(Self.scan)
                 case .album(let id): found = albumStore.photos(in: id).compactMap(Self.scan)
+                case .timeline: found = index.all.map(\.scanned)
+                case .search(let text): found = index.search(text).map(\.scanned)
                 case .importing: found = []
                 }
                 return (found, store.records(for: found.map(\.url)))
@@ -174,11 +203,12 @@ final class AppModel {
             self.recipes = records.compactMapValues { $0.recipe.isEmpty ? nil : $0.recipe }
             self.labels = records.compactMapValues { $0.labels.isEmpty ? nil : $0.labels }
             if case .album = source { albums = albumStore.albums }
-            photos = sortOrder.sorted(found, dates: dates.dates(for: found))
-            selection = selection.intersection(found.map(\.url))
+            // The timeline and search results are newest first; folders follow the sort menu.
+            loadedPhotos = source.isFolderLike ? sortOrder.sorted(found, dates: dates.dates(for: found)) : found
+            applyFilter()
             isLoadingPhotos = false
             completion?()
-            loadDatesTaken(for: found, generation: generation)
+            if source.isFolderLike { loadDatesTaken(for: found, generation: generation) }
         }
     }
 
@@ -202,11 +232,38 @@ final class AppModel {
                 dates.save()
             }.value
             guard generation == loadGeneration, sortOrder == .dateTaken else { return }
-            photos = sortOrder.sorted(photos, dates: dates.dates(for: photos))
+            loadedPhotos = sortOrder.sorted(loadedPhotos, dates: dates.dates(for: loadedPhotos))
+            applyFilter()
+        }
+    }
+
+    /// Applies the filter, and groups the timeline by month.
+    private func applyFilter() {
+        photos = filter.isActive ? loadedPhotos.filter { filter.matches(labels[$0.url]) } : loadedPhotos
+        selection = selection.intersection(photos.map(\.url))
+        if source == .timeline {
+            var groups: [GridSection] = []
+            let calendar = Calendar.current
+            let f = DateFormatter()
+            f.setLocalizedDateFormatFromTemplate("MMMM yyyy")
+            for photo in photos {
+                let date = index.entry(for: photo.url)?.date ?? photo.created
+                let c = calendar.dateComponents([.year, .month], from: date)
+                let id = String(format: "%04d-%02d", c.year ?? 0, c.month ?? 0)
+                if groups.last?.id == id {
+                    groups[groups.count - 1].urls.append(photo.url)
+                } else {
+                    groups.append(GridSection(id: id, title: f.string(from: date), urls: [photo.url]))
+                }
+            }
+            sections = groups
+        } else {
+            sections = nil
         }
     }
 
     private func foldersChanged(_ changed: Set<URL>) {
+        scheduleReindex(after: .seconds(4))
         if case .album = source {
             reloadPhotos()
             return
@@ -646,6 +703,8 @@ final class AppModel {
             changedTargets.append(url)
         }
         guard !changedTargets.isEmpty else { return }
+        for url in changedTargets { index.updateLabels(labels(for: url), for: url) }
+        if filter.isActive { applyFilter() }
         if case .addTag(let tag) = change { remember(tag) }
         let store = store
         let snapshot = changedTargets.map { ($0, labels(for: $0)) }
@@ -674,6 +733,87 @@ final class AppModel {
         knownTags.append(t)
         knownTags.sort { $0.localizedStandardCompare($1) == .orderedAscending }
         UserDefaults.standard.set(knownTags, forKey: "knownTags")
+    }
+
+    // MARK: Search and the library index
+
+    /// What's typed in the search field.
+    var searchText = "" {
+        didSet { if searchText != oldValue { scheduleSearch() } }
+    }
+    private var sourceBeforeSearch: Source?
+    private var searchTask: Task<Void, Never>?
+
+    private func scheduleSearch() {
+        searchTask?.cancel()
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            let text = searchText.trimmingCharacters(in: .whitespaces)
+            if text.isEmpty {
+                if case .search = source { source = sourceBeforeSearch }
+                return
+            }
+            if case .search = source {} else { sourceBeforeSearch = source }
+            closeEditor()
+            source = .search(text)
+        }
+    }
+
+    /// Read text in photos so search can find it (Settings).
+    var readsTextInPhotos = UserDefaults.standard.object(forKey: "readTextInPhotos") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(readsTextInPhotos, forKey: "readTextInPhotos")
+            if readsTextInPhotos { readTextInBackground() } else { textTask?.cancel(); indexStatus = nil }
+        }
+    }
+
+    /// Updates the index a moment from now (changes often come in bursts).
+    func scheduleReindex(after delay: Duration) {
+        reindexTask?.cancel()
+        reindexTask = Task {
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            refreshIndex()
+        }
+    }
+
+    private func refreshIndex() {
+        indexTask?.cancel()
+        textTask?.cancel()
+        let roots = Array(library.resolvedURLs.values)
+        let index = index
+        let store = store
+        if index.count == 0 { indexStatus = "Indexing photos…" }
+        indexTask = Task {
+            let changed = await Task.detached(priority: .utility) {
+                index.refresh(roots: roots, store: store, isCancelled: { Task.isCancelled })
+            }.value
+            guard !Task.isCancelled else { return }
+            indexStatus = nil
+            if changed, source == .timeline || source?.isSearch == true { reloadPhotos() }
+            readTextInBackground()
+        }
+    }
+
+    /// Reads text in photos not read yet, a few at a time in the background.
+    private func readTextInBackground() {
+        textTask?.cancel()
+        guard readsTextInPhotos else { return }
+        let index = index
+        textTask = Task {
+            let todo = index.photosNeedingText()
+            guard !todo.isEmpty else { return }
+            for (i, url) in todo.enumerated() {
+                if Task.isCancelled { break }
+                indexStatus = "Reading text in photos: \((i + 1).formatted()) of \(todo.count.formatted())"
+                let text = await Task.detached(priority: .background) { LibraryIndex.recognizeText(in: url) }.value
+                index.setText(text, for: url)
+                if i % 50 == 49 { index.save() }
+            }
+            index.save()
+            if !Task.isCancelled { indexStatus = nil }
+        }
     }
 
     // MARK: Albums
@@ -914,6 +1054,72 @@ extension AppModel.Source {
     var isBrowsable: Bool {
         if case .importing = self { return false }
         return true
+    }
+
+    /// Folders, albums and opened photos follow the sort menu; the timeline and search
+    /// results are always newest first.
+    var isFolderLike: Bool {
+        switch self {
+        case .timeline, .search: false
+        default: true
+        }
+    }
+
+    var isSearch: Bool {
+        if case .search = self { return true }
+        return false
+    }
+}
+
+/// A titled group of photos in the grid (a month in the timeline).
+struct GridSection: Equatable {
+    let id: String
+    let title: String
+    var urls: [URL]
+}
+
+/// Which photos the grid shows.
+struct GridFilter: Equatable {
+    enum FlagFilter: String, CaseIterable, Identifiable {
+        case any, picks, hideRejects, rejects
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .any: "Any"
+            case .picks: "Picks Only"
+            case .hideRejects: "Hide Rejects"
+            case .rejects: "Rejects Only"
+            }
+        }
+    }
+
+    /// At least this many stars (0 = any).
+    var minRating = 0
+    var flag = FlagFilter.any
+    /// Only photos with this tag.
+    var tag: String?
+
+    var isActive: Bool { minRating > 0 || flag != .any || tag != nil }
+
+    func matches(_ labels: PhotoLabels?) -> Bool {
+        let l = labels ?? PhotoLabels()
+        if l.rating < minRating { return false }
+        switch flag {
+        case .any: break
+        case .picks: if l.flag != .pick { return false }
+        case .hideRejects: if l.flag == .reject { return false }
+        case .rejects: if l.flag != .reject { return false }
+        }
+        if let tag, !l.hasTag(tag) { return false }
+        return true
+    }
+
+    var summary: String {
+        var parts: [String] = []
+        if minRating > 0 { parts.append(String(repeating: "★", count: minRating) + (minRating < 5 ? " or more" : "")) }
+        if flag != .any { parts.append(flag.title.lowercased()) }
+        if let tag { parts.append("tagged “\(tag)”") }
+        return parts.joined(separator: ", ")
     }
 }
 

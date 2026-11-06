@@ -9,6 +9,8 @@ struct PhotoGridView: NSViewRepresentable {
     let photos: [ScannedPhoto]
     let recipes: [URL: EditRecipe]
     var labels: [URL: PhotoLabels] = [:]
+    /// Titled groups (the timeline's months); nil shows one plain grid.
+    var sections: [GridSection]? = nil
     @Binding var selection: Set<URL>
     let thumbnailSize: CGFloat
     let thumbnails: ThumbnailStore
@@ -33,6 +35,9 @@ struct PhotoGridView: NSViewRepresentable {
         collection.allowsEmptySelection = true
         collection.backgroundColors = [.clear]
         collection.register(PhotoGridItem.self, forItemWithIdentifier: PhotoGridItem.identifier)
+        collection.register(GridSectionHeader.self, forSupplementaryViewOfKind: NSCollectionView.elementKindSectionHeader,
+                            withIdentifier: GridSectionHeader.identifier)
+        layout.sectionHeadersPinToVisibleBounds = true
         collection.delegate = context.coordinator
         collection.setDraggingSourceOperationMask(.copy, forLocal: false)
         collection.coordinator = context.coordinator
@@ -56,10 +61,12 @@ struct PhotoGridView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSCollectionViewDelegate, NSCollectionViewDelegateFlowLayout {
         var parent: PhotoGridView
-        private var dataSource: NSCollectionViewDiffableDataSource<Int, URL>?
+        private var dataSource: NSCollectionViewDiffableDataSource<String, URL>?
         private weak var collection: NSCollectionView?
         private var byURL: [URL: ScannedPhoto] = [:]
         private var shownURLs: [URL] = []
+        private var shownSections: [GridSection]?
+        private var sectionTitles: [String: String] = [:]
         private var shownRecipes: [URL: EditRecipe] = [:]
         private var shownLabels: [URL: PhotoLabels] = [:]
         private var itemSize: CGFloat = 0
@@ -69,7 +76,7 @@ struct PhotoGridView: NSViewRepresentable {
 
         func attach(_ collection: NSCollectionView) {
             self.collection = collection
-            dataSource = NSCollectionViewDiffableDataSource<Int, URL>(collectionView: collection) {
+            dataSource = NSCollectionViewDiffableDataSource<String, URL>(collectionView: collection) {
                 [weak self] collectionView, indexPath, url in
                 let item = collectionView.makeItem(withIdentifier: PhotoGridItem.identifier, for: indexPath)
                 if let self, let cell = item as? PhotoGridItem, let photo = self.byURL[url] {
@@ -77,6 +84,16 @@ struct PhotoGridView: NSViewRepresentable {
                                    store: self.parent.thumbnails, pointSize: self.itemSize)
                 }
                 return item
+            }
+            dataSource?.supplementaryViewProvider = { [weak self] collectionView, kind, indexPath in
+                let view = collectionView.makeSupplementaryView(ofKind: kind, withIdentifier: GridSectionHeader.identifier,
+                                                                for: indexPath)
+                if let header = view as? GridSectionHeader, let self,
+                   let id = self.dataSource?.snapshot().sectionIdentifiers[safe: indexPath.section] {
+                    let count = self.dataSource?.snapshot().numberOfItems(inSection: id) ?? 0
+                    header.set(title: self.sectionTitles[id] ?? "", count: count)
+                }
+                return view as! (NSView & NSCollectionViewElement)
             }
         }
 
@@ -92,11 +109,23 @@ struct PhotoGridView: NSViewRepresentable {
 
             let urls = parent.photos.map(\.url)
             byURL = Dictionary(parent.photos.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
-            if urls != shownURLs {
+            if urls != shownURLs || parent.sections != shownSections {
                 shownURLs = urls
-                var snapshot = NSDiffableDataSourceSnapshot<Int, URL>()
-                snapshot.appendSections([0])
-                snapshot.appendItems(urls)
+                shownSections = parent.sections
+                var snapshot = NSDiffableDataSourceSnapshot<String, URL>()
+                if let sections = parent.sections {
+                    sectionTitles = Dictionary(sections.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
+                    for section in sections {
+                        snapshot.appendSections([section.id])
+                        snapshot.appendItems(section.urls, toSection: section.id)
+                    }
+                } else {
+                    sectionTitles = [:]
+                    snapshot.appendSections([""])
+                    snapshot.appendItems(urls)
+                }
+                (collection.collectionViewLayout as? NSCollectionViewFlowLayout)?.headerReferenceSize =
+                    parent.sections == nil ? .zero : NSSize(width: 0, height: GridSectionHeader.height)
                 dataSource.apply(snapshot, animatingDifferences: false)
             }
 
@@ -192,6 +221,54 @@ struct PhotoGridView: NSViewRepresentable {
 
         func label(_ change: LabelChange) { parent.onLabel(change) }
     }
+}
+
+/// A month heading in the timeline; stays at the top while its photos scroll by.
+final class GridSectionHeader: NSView, NSCollectionViewElement {
+    static let identifier = NSUserInterfaceItemIdentifier("GridSectionHeader")
+    static let height: CGFloat = 36
+
+    private let title = NSTextField(labelWithString: "")
+    private let count = NSTextField(labelWithString: "")
+    private let background = NSVisualEffectView()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        background.material = .headerView
+        background.blendingMode = .withinWindow
+        background.translatesAutoresizingMaskIntoConstraints = false
+        title.font = .systemFont(ofSize: 15, weight: .semibold)
+        title.translatesAutoresizingMaskIntoConstraints = false
+        count.font = .systemFont(ofSize: 12)
+        count.textColor = .secondaryLabelColor
+        count.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(background)
+        addSubview(title)
+        addSubview(count)
+        NSLayoutConstraint.activate([
+            background.leadingAnchor.constraint(equalTo: leadingAnchor),
+            background.trailingAnchor.constraint(equalTo: trailingAnchor),
+            background.topAnchor.constraint(equalTo: topAnchor),
+            background.bottomAnchor.constraint(equalTo: bottomAnchor),
+            title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            title.centerYAnchor.constraint(equalTo: centerYAnchor),
+            count.leadingAnchor.constraint(equalTo: title.trailingAnchor, constant: 8),
+            count.firstBaselineAnchor.constraint(equalTo: title.firstBaselineAnchor),
+        ])
+        setAccessibilityRole(.staticText)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func set(title text: String, count n: Int) {
+        title.stringValue = text
+        count.stringValue = n == 1 ? "1 photo" : "\(n.formatted()) photos"
+        setAccessibilityLabel("\(text), \(count.stringValue)")
+    }
+}
+
+extension Array {
+    subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }
 
 /// Handles double-click, Return and the right-click menu.

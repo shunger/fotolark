@@ -38,6 +38,12 @@ private struct GeneralSettings: View {
 
             Toggle("Neutral gray background while editing", isOn: $neutralGray)
 
+            Toggle("Read text in photos so search can find it", isOn: $model.readsTextInPhotos)
+            Text("Signs, documents and screenshots become searchable. This runs quietly in the background on this Mac; nothing leaves it.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             Toggle("Also save tags inside the photo files", isOn: $model.writesTagsToFiles)
             Text("Other photo apps can then see your tags. This rewrites the details stored in each file, never the picture, and keeps a backup. Ratings and flags stay with Fotolark’s edits.")
                 .font(.callout)

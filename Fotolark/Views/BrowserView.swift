@@ -10,7 +10,13 @@ struct BrowserView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            grid
+            VStack(spacing: 0) {
+                if model.filter.isActive {
+                    FilterBar(model: model)
+                    Divider()
+                }
+                grid
+            }
             if showInfo {
                 Divider()
                 InfoPanel(model: model, url: selectedSingle)
@@ -28,11 +34,15 @@ struct BrowserView: View {
                 }
             }
             ToolbarItem {
+                FilterMenu(model: model)
+            }
+            ToolbarItem {
                 Picker("Sort", selection: $model.sortOrder) {
                     ForEach(PhotoSortOrder.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.menu)
-                .help("Sort photos")
+                .disabled(!(model.source?.isFolderLike ?? true))
+                .help(model.source?.isFolderLike ?? true ? "Sort photos" : "Newest first")
             }
             ToolbarItem {
                 Slider(value: $model.thumbnailSize, in: 80...360)
@@ -78,7 +88,20 @@ struct BrowserView: View {
                     ProgressView()
                 } else {
                     Image(systemName: "photo").font(.system(size: 40, weight: .light)).foregroundStyle(.secondary)
-                    if model.currentAlbum != nil {
+                    if model.filter.isActive && model.loadedCount > 0 {
+                        Text("No photos match the filter").font(.title3)
+                        Button("Clear Filter") { model.filter = GridFilter() }
+                    } else if case .search(let text) = model.source {
+                        Text("Nothing found for “\(text)”").font(.title3)
+                        Text("Search looks at names, folders, tags, cameras, dates (try “July 2024”) and text in photos.")
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 420)
+                        if let status = model.indexStatus { Text(status).font(.callout).foregroundStyle(.secondary) }
+                    } else if model.source == .timeline {
+                        Text(model.library.roots.isEmpty ? "Add a folder to see your photos here" : "Looking for photos…")
+                            .font(.title3)
+                    } else if model.currentAlbum != nil {
                         Text("No photos in this album").font(.title3)
                         Text("Select photos in a folder, then right-click and choose Add to Album.")
                             .foregroundStyle(.secondary)
@@ -92,6 +115,7 @@ struct BrowserView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             PhotoGridView(photos: model.photos, recipes: model.recipes, labels: model.labels,
+                          sections: model.sections,
                           selection: $model.selection,
                           thumbnailSize: model.thumbnailSize, thumbnails: model.thumbnails,
                           promises: model.promises,
@@ -103,6 +127,56 @@ struct BrowserView: View {
 
     private var selectedSingle: URL? {
         model.selection.count == 1 ? model.selection.first : nil
+    }
+}
+
+/// Show only photos with enough stars, a flag or a tag.
+struct FilterMenu: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        Menu {
+            Picker("Stars", selection: $model.filter.minRating) {
+                Text("Any Rating").tag(0)
+                ForEach(1...5, id: \.self) { r in
+                    Text(String(repeating: "★", count: r) + (r < 5 ? " or More" : "")).tag(r)
+                }
+            }
+            Picker("Flag", selection: $model.filter.flag) {
+                ForEach(GridFilter.FlagFilter.allCases) { Text($0.title).tag($0) }
+            }
+            Picker("Tag", selection: $model.filter.tag) {
+                Text("Any Tag").tag(String?.none)
+                ForEach(model.knownTags, id: \.self) { Text($0).tag(String?.some($0)) }
+            }
+            Divider()
+            Button("Clear Filter") { model.filter = GridFilter() }
+                .disabled(!model.filter.isActive)
+        } label: {
+            Label("Filter", systemImage: model.filter.isActive ? "line.3.horizontal.decrease.circle.fill"
+                                                             : "line.3.horizontal.decrease.circle")
+        }
+        .help("Show only some photos: by stars, pick or reject, or tag")
+    }
+}
+
+/// Says a filter is hiding photos, with a way to clear it.
+struct FilterBar: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        HStack {
+            Image(systemName: "line.3.horizontal.decrease.circle.fill").foregroundStyle(Color.accentColor)
+            Text("Showing \(model.photos.count.formatted()) of \(model.loadedCount.formatted()): \(model.filter.summary)")
+                .lineLimit(1)
+            Spacer()
+            Button("Clear Filter") { model.filter = GridFilter() }
+                .controlSize(.small)
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
     }
 }
 
