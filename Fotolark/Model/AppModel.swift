@@ -1159,6 +1159,9 @@ final class AppModel {
             + (photosLibrary.map { [$0 as any ImportSource] } ?? [])
     }
 
+    /// Edit › Select All when nothing else takes it (the import screen listens).
+    var selectAllRequests = 0
+
     // MARK: Apple Photos
 
     /// Made when first opened, so Fotolark asks for Photos access only when it's wanted.

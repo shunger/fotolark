@@ -16,6 +16,14 @@ struct ImportView: View {
     @State private var from = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
     @State private var to = Date()
     @State private var selection: Set<ImportCandidate.ID> = []
+    /// Where each photo sits in the grid (grid coordinates), for drag-selecting.
+    @State private var cellFrames = CellFrames()
+    /// The box being dragged, in grid coordinates.
+    @State private var marquee: CGRect?
+    /// The selection when the drag began (⌘ or ⇧ drags add to it).
+    @State private var marqueeBase: Set<ImportCandidate.ID> = []
+    /// The last photo clicked, where a ⇧-click range starts.
+    @State private var anchor: ImportCandidate.ID?
     @State private var options = ImportView.savedOptions
     @State private var destination: URL?
     @State private var useDateFolders = true
@@ -196,20 +204,54 @@ struct ImportView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
+            let shown = photos
             ScrollView {
                 let live = liveStillNames
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbSize), spacing: 10)], spacing: 10) {
-                    ForEach(photos) { c in
+                    ForEach(shown) { c in
                         ImportCell(source: source, candidate: c, isSelected: selection.contains(c.id),
                                    alreadyImported: model.importHistory.contains(c), size: thumbSize,
                                    isLive: c.isPhoto && live.contains(c.baseName))
-                            .onTapGesture {
-                                if selection.contains(c.id) { selection.remove(c.id) } else { selection.insert(c.id) }
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.gridSpace)) } action: { frame in
+                                cellFrames.frames[c.id] = frame
                             }
+                            .onTapGesture { click(c.id, in: shown) }
                     }
                 }
                 .padding(12)
+                // Room to start a drag below the last row.
+                .padding(.bottom, 40)
+                .frame(maxWidth: .infinity, alignment: .top)
+                .contentShape(Rectangle())
+                .coordinateSpace(.named(Self.gridSpace))
+                .overlay(alignment: .topLeading) {
+                    if let marquee {
+                        Rectangle()
+                            .fill(Color.accentColor.opacity(0.15))
+                            .overlay(Rectangle().strokeBorder(Color.accentColor, lineWidth: 1))
+                            .frame(width: marquee.width, height: marquee.height)
+                            .offset(x: marquee.minX, y: marquee.minY)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 4, coordinateSpace: .named(Self.gridSpace))
+                        .onChanged { v in
+                            if marquee == nil {
+                                let mods = NSEvent.modifierFlags
+                                marqueeBase = mods.contains(.command) || mods.contains(.shift) ? selection : []
+                            }
+                            let r = CGRect(x: min(v.startLocation.x, v.location.x), y: min(v.startLocation.y, v.location.y),
+                                           width: abs(v.location.x - v.startLocation.x),
+                                           height: abs(v.location.y - v.startLocation.y))
+                            marquee = r
+                            let hit = Set(cellFrames.frames.compactMap { $0.value.intersects(r) ? $0.key : nil })
+                            selection = marqueeBase.union(hit)
+                        }
+                        .onEnded { _ in marquee = nil }
+                )
             }
+            .onChange(of: model.selectAllRequests) { selection = Set(shown.map(\.id)) }
         }
     }
 
@@ -269,12 +311,20 @@ struct ImportView: View {
                 if destination == nil {
                     Text("Choose where the photos go.").font(.caption).foregroundStyle(.secondary)
                 }
+                if selection.isEmpty {
+                    HStack {
+                        Text("Click photos to pick some, drag a box across them, or ⇧-click for a range.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Select All") { selection = Set(photos.map(\.id)) }.controlSize(.small)
+                    }
+                }
                 if !selection.isEmpty {
                     HStack {
                         Text(selection.count == 1 ? "Only the photo you clicked is imported."
                              : "Only the \(selection.count) photos you clicked are imported.")
                             .font(.caption).foregroundStyle(.secondary)
-                        Button("Select None") { selection = [] }.controlSize(.small)
+                        Button("Select None") { selection = []; anchor = nil }.controlSize(.small)
                     }
                 }
             }
@@ -286,6 +336,21 @@ struct ImportView: View {
         let n = chosen.count
         if selection.isEmpty { return n == 1 ? "Import 1 Photo" : "Import All \(n.formatted()) Photos" }
         return n == 1 ? "Import 1 Selected Photo" : "Import \(n.formatted()) Selected Photos"
+    }
+
+    static let gridSpace = "importGrid"
+
+    /// Click toggles a photo; ⇧-click selects everything from the last photo clicked.
+    private func click(_ id: ImportCandidate.ID, in shown: [ImportCandidate]) {
+        if NSEvent.modifierFlags.contains(.shift), let anchor,
+           let a = shown.firstIndex(where: { $0.id == anchor }), let b = shown.firstIndex(where: { $0.id == id }) {
+            selection.formUnion(shown[min(a, b)...max(a, b)].map(\.id))
+        } else if selection.contains(id) {
+            selection.remove(id)
+        } else {
+            selection.insert(id)
+        }
+        anchor = id
     }
 
     private func chooseDestination() {
@@ -383,4 +448,10 @@ private struct ImportCell: View {
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityHint("Selects this photo for importing")
     }
+}
+
+/// Grid positions of the photos. Kept outside SwiftUI's change tracking, since they
+/// change as photos scroll into view and nothing needs redrawing for that.
+final class CellFrames {
+    var frames: [ImportCandidate.ID: CGRect] = [:]
 }

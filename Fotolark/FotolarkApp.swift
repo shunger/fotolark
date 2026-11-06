@@ -46,6 +46,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Edit › Select All (⌘A) reaches here only when nothing focused handled it (text
+    /// fields and the photo grid handle their own). The import screen selects all its photos.
+    @objc func selectAll(_ sender: Any?) {
+        MainActor.assumeIsolated {
+            let model = AppModel.shared
+            if case .importing = model.source, model.editor == nil { model.selectAllRequests += 1 }
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     func applicationWillTerminate(_ notification: Notification) {
