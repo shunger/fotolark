@@ -40,12 +40,13 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
   6. Borders and frames, shapes and arrows, versions: **built**
   7. Print, contact sheet, collage, PDF: **built**
 
-- Phase 5 (extras and Mac App Store release): in progress. Batches:
+- Phase 5 (extras and Mac App Store release): built; waiting on the "Mac app in daily
+  use; join the Apple Developer Program" gate. Release steps: [docs/release.md](docs/release.md). Batches:
   1. Find duplicates (identical and look-alike), face grouping and People: **built**
   2. Apple Photos: import albums or dates to folders; open, edit and save back: **built**
   3. Watch folders, Finder Services, Shortcuts actions: **built**
   4. Help and first-run tour: **built**
-  5. App Store readiness: privacy manifest, required settings, release checklist
+  5. App Store readiness: privacy manifest, required settings, release checklist: **built**
 
 ## Build and test
 
@@ -55,13 +56,14 @@ Built in Swift + SwiftUI on Apple frameworks only (Core Image, ImageIO, Vision, 
 - Check the engine still builds for iPad/iPhone:
   `cd FotolarkKit && xcodebuild -scheme FotolarkKit -destination 'generic/platform=iOS' build`.
 
-The app is sandboxed and signed to run locally (no Apple Developer account needed yet).
+The app is sandboxed and signed to run locally (no Apple Developer account needed yet). It will be released through the Mac App Store; see docs/release.md.
 
 ## Docs
 
 - [docs/plan.md](docs/plan.md) — full version plan: 109 features, 6 phases plus optional Phase 7, risks, next steps
 - [docs/roadmap.png](docs/roadmap.png) — release roadmap diagram
 - [docs/naming-and-legal.md](docs/naming-and-legal.md) — name screening and rules for staying clear of Picasa/Google trademarks
+- [docs/release.md](docs/release.md) — Mac App Store release checklist; [app-store-listing.md](docs/app-store-listing.md), [privacy-policy.md](docs/privacy-policy.md) — drafts
 - Live, editable plan (Claude Doc): https://claude.ai/artifact/C4sZy2hHauiyKFhUyMas6H
 
 ## Layout
