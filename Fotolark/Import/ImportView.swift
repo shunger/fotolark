@@ -93,6 +93,18 @@ struct ImportView: View {
                 Text(summary).font(.callout).foregroundStyle(.secondary)
             }
             Spacer()
+            if let library = source as? PhotosLibrarySource {
+                Picker("Album", selection: Binding(get: { library.albumID }, set: { library.albumID = $0 })) {
+                    Text("All Photos").tag(String?.none)
+                    ForEach(library.albums) { Text("\($0.title) (\($0.count))").tag(String?.some($0.id)) }
+                }
+                .fixedSize()
+                Button("Edit in Fotolark") {
+                    if let id = selection.first { model.editFromPhotos(id) }
+                }
+                .disabled(selection.count != 1 || selection.first?.hasSuffix(PhotosLibrarySource.liveSuffix) == true)
+                .help("Edit the selected picture, then save it back to Photos. Photos keeps the original.")
+            }
             Picker("Show", selection: $filter) {
                 ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
             }

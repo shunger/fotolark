@@ -43,6 +43,15 @@ struct SidebarView: View {
                             }
                         }
                 }
+                if model.photosLibrary == nil {
+                    Button {
+                        model.showPhotosLibrary()
+                    } label: {
+                        Label("Apple Photos", systemImage: "photo.on.rectangle.angled")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy photos out of your Photos library into folders, or edit them and save back to Photos")
+                }
                 Button {
                     model.importFromFolderWithPanel()
                 } label: {

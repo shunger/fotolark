@@ -24,6 +24,7 @@ struct FotolarkCommands: Commands {
                 .keyboardShortcut("o", modifiers: [.command, .shift])
             Button("Import from Folder or Drive…") { model.importFromFolderWithPanel() }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
+            Button("Apple Photos…") { model.showPhotosLibrary() }
         }
 
         CommandGroup(replacing: .saveItem) {
@@ -38,6 +39,9 @@ struct FotolarkCommands: Commands {
                 .disabled(model.layoutPhotos.isEmpty)
             Button("Remove Background…") { model.removeBackground() }
                 .disabled(model.targetPhotos.isEmpty)
+            Button("Save to Photos") { model.saveToPhotos() }
+                .keyboardShortcut("s")
+                .disabled(!model.isEditingPhotosPicture)
             Button("Save Over Original…") { model.isConfirmingOverwrite = true }
                 .disabled(!canSaveOver)
             Divider()

@@ -176,6 +176,11 @@ struct EditorToolbar: ToolbarContent {
             Button("Redo", systemImage: "arrow.uturn.forward") { editor.redo() }
                 .disabled(!editor.history.canRedo)
                 .help("Redo (⇧⌘Z)")
+            if model.isEditingPhotosPicture {
+                Button("Save to Photos", systemImage: "photo.badge.checkmark") { model.saveToPhotos() }
+                    .disabled(model.isSavingToPhotos)
+                    .help("Save this edit back into Apple Photos (Photos keeps the original)")
+            }
             Button("Export", systemImage: "arrow.down.doc") { model.sheet = .export }
                 .help("Export an edited copy (⌘E)")
             ShareButton(model: model)

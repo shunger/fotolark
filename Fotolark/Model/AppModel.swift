@@ -1110,11 +1110,68 @@ final class AppModel {
 
     static func importKey(_ source: any ImportSource) -> String {
         if let folder = source as? FolderImportSource { return "folder:" + folder.folder.path }
+        if source is PhotosLibrarySource { return "photos" }
         return "device:\(ObjectIdentifier(source).hashValue)"
     }
 
     var allImportSources: [any ImportSource] {
         (devices.devices as [any ImportSource]) + (folderImports as [any ImportSource])
+            + (photosLibrary.map { [$0 as any ImportSource] } ?? [])
+    }
+
+    // MARK: Apple Photos
+
+    /// Made when first opened, so Fotolark asks for Photos access only when it's wanted.
+    private(set) var photosLibrary: PhotosLibrarySource?
+    /// The Photos picture being edited, if the editor is working on one.
+    private(set) var photosSession: PhotosEditSession?
+    private(set) var isSavingToPhotos = false
+
+    func showPhotosLibrary() {
+        if photosLibrary == nil { photosLibrary = PhotosLibrarySource() }
+        closeEditor()
+        source = .importing("photos")
+    }
+
+    /// Opens a picture from Photos in the editor (working on a copy).
+    func editFromPhotos(_ id: String) {
+        guard let asset = photosLibrary?.asset(id) else { return }
+        guard asset.mediaType == .image else {
+            errorMessage = "Only photos can be edited, not videos."
+            return
+        }
+        Task {
+            do {
+                let session = try await PhotosEditSession.begin(asset, store: store)
+                photosSession = session
+                open([session.workingURL])
+            } catch {
+                errorMessage = "Couldn’t open that picture from Photos: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    var isEditingPhotosPicture: Bool {
+        guard let editor, let photosSession else { return false }
+        return editor.url.standardizedFileURL == photosSession.workingURL.standardizedFileURL
+    }
+
+    /// Saves the edited picture back into Photos as an edit (Photos keeps the original).
+    func saveToPhotos() {
+        guard isEditingPhotosPicture, let editor, let session = photosSession else { return }
+        editor.saveNow()
+        let recipe = editor.history.current
+        isSavingToPhotos = true
+        Task {
+            do {
+                try await session.save(recipe, engine: engine)
+                isSavingToPhotos = false
+                editor.toolMessage = "Saved to Photos. Photos keeps the original; choose Revert to Original there to undo."
+            } catch {
+                isSavingToPhotos = false
+                errorMessage = "Couldn’t save to Photos: \(error.localizedDescription)"
+            }
+        }
     }
 
     func importSource(for key: String) -> (any ImportSource)? {

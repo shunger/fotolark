@@ -213,6 +213,7 @@
 				INFOPLIST_FILE = Fotolark/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fotolark;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Fotolark copies photos out of your Photos library into folders you choose, and lets you edit pictures and save the edits back to Photos.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -242,6 +243,7 @@
 				INFOPLIST_FILE = Fotolark/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fotolark;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Fotolark copies photos out of your Photos library into folders you choose, and lets you edit pictures and save the edits back to Photos.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
