@@ -6,7 +6,10 @@ struct InspectorView: View {
     @Bindable var editor: PhotoEditor
     @Bindable var model: AppModel
 
+    private var accordion = InspectorAccordion.shared
+
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 switch editor.tool {
@@ -33,6 +36,15 @@ struct InspectorView: View {
         }
         .scrollIndicators(.automatic)
         .disabled(!editor.isLoaded)
+        // Bring a section that was just opened to the top of the panel.
+        .onChange(of: accordion.open) {
+            guard let open = accordion.open else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(200))
+                withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(open, anchor: .top) }
+            }
+        }
+        }
     }
 
     @ViewBuilder
@@ -202,18 +214,19 @@ private struct InspectorSection<Content: View>: View {
 private struct CollapsibleSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
-    @AppStorage private var isExpanded: Bool
+    private var accordion = InspectorAccordion.shared
 
     init(title: String, startsOpen: Bool, @ViewBuilder content: () -> Content) {
         self.title = title
         self.content = content()
-        _isExpanded = AppStorage(wrappedValue: startsOpen, "section.\(title)")
     }
+
+    private var isExpanded: Bool { accordion.open == title }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
-                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+                withAnimation(.easeInOut(duration: 0.18)) { accordion.toggle(title) }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right")
@@ -232,6 +245,21 @@ private struct CollapsibleSection<Content: View>: View {
             .help(isExpanded ? "Hide \(title)" : "Show \(title)")
             if isExpanded { content }
         }
+        .id(title)
+    }
+}
+
+/// One section of the editing panel open at a time: Basic fixes when Fotolark starts,
+/// then whichever title was clicked last (clicking the open one closes it).
+@MainActor @Observable
+final class InspectorAccordion {
+    static let shared = InspectorAccordion()
+    static let firstSection = "Basic fixes"
+
+    private(set) var open: String? = firstSection
+
+    func toggle(_ title: String) {
+        open = open == title ? nil : title
     }
 }
 
