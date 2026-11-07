@@ -116,6 +116,7 @@ enum LayoutCheck {
         check("resize", ResizeSheet(editor: editor), width: 1200, height: 740, fitsScreen: true)
         check("settings", SettingsView(model: model), width: 1200, height: 740, fitsScreen: true)
         check("help", HelpView(), width: 760, height: 520)
+        check("empty window", EmptyStateView(model: model, isDropTargeted: false), width: 530, height: 600)
         model.notice = AppModel.Notice(text: "Done: Import 3,365 from a very long device name iPhone-S of Steve",
                                        detail: "2 skipped", folder: dir, hasProblems: true)
         check("notice", NoticeView(model: model, notice: model.notice!), width: 530, height: 80)

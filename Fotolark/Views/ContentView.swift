@@ -271,27 +271,94 @@ struct EmptyStateView: View {
     let isDropTargeted: Bool
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 22) {
             Image(systemName: "photo.on.rectangle.angled")
-                .font(.system(size: 56, weight: .light))
+                .font(.system(size: 52, weight: .light))
                 .foregroundStyle(.secondary)
-            Text("Drop photos or a folder here")
-                .font(.title2.weight(.semibold))
-            Text("Fotolark edits photos where they are. Your originals are never changed unless you choose Save Over Original.")
-                .multilineTextAlignment(.center)
+            VStack(spacing: 8) {
+                Text(model.library.roots.isEmpty ? "Let’s find your photos" : "Choose a folder in the sidebar")
+                    .font(.title2.weight(.semibold))
+                Text("Fotolark shows the photos where they already are and edits them without changing the originals.")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 420)
+            }
+            VStack(spacing: 10) {
+                StartButton(title: "Add Your Pictures Folder…", detail: "Or any folder of photos on this Mac or a drive",
+                            symbol: "folder.badge.plus") { addPicturesFolder() }
+                StartButton(title: "Import from iPhone or Camera",
+                            detail: model.devices.devices.isEmpty
+                                ? "Connect it with a cable and unlock it first"
+                                : "Copy photos from \(model.devices.devices[0].title)",
+                            symbol: "iphone") {
+                    if let device = model.devices.devices.first {
+                        model.source = .importing(AppModel.importKey(device))
+                    }
+                }
+                .disabled(model.devices.devices.isEmpty)
+                StartButton(title: "Import from Apple Photos", detail: "Copy albums or photos out of your Photos library",
+                            symbol: "photo.on.rectangle") { model.showPhotosLibrary() }
+            }
+            .frame(width: 380)
+            Text("You can also drop photos or a folder anywhere in this window.")
+                .font(.callout)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: 380)
-            Button("Open Photos…") { model.showOpenPanel() }
-                .controlSize(.large)
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
-                .foregroundStyle(isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.35))
+                .foregroundStyle(isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.25))
                 .padding(24)
         }
+    }
+
+    /// The folder picker, opened at the person's own Pictures folder.
+    private func addPicturesFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Add Folder"
+        panel.message = "Choose folders of photos. Fotolark shows them in the sidebar and keeps them up to date."
+        // The sandbox's home is the app's container; the real one comes from the account.
+        if let home = getpwuid(getuid())?.pointee.pw_dir {
+            panel.directoryURL = URL(fileURLWithPath: String(cString: home)).appendingPathComponent("Pictures", isDirectory: true)
+        }
+        if panel.runModal() == .OK { model.open(panel.urls) }
+    }
+}
+
+/// A large choice on the empty screen: a symbol, a title and a line under it.
+private struct StartButton: View {
+    let title: String
+    let detail: String
+    let symbol: String
+    let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.title2)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.headline)
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .contentShape(RoundedRectangle(cornerRadius: 10))
+            .opacity(isEnabled ? 1 : 0.55)
+        }
+        .buttonStyle(.plain)
     }
 }
 
