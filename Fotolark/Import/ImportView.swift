@@ -34,6 +34,7 @@ struct ImportView: View {
     @State private var deleteAfter = false
     @State private var confirmingDelete = false
     @AppStorage("import.thumbSize") private var thumbSize = 150.0
+    @AppStorage("import.groupBy") private var groupBy = ImportGroup.Period.month.rawValue
 
     private var photos: [ImportCandidate] {
         Importer.plan(source.candidates, options: options).shown.filter { c in
@@ -98,6 +99,16 @@ struct ImportView: View {
     /// Two rows, so it fits a narrow window: what this is (and Photos' album choice) on
     /// top, the filters below. Nothing in it may force the window wider.
     private var header: some View {
+        headerContent
+            .padding(12)
+            // Never let the header push the window wider than it is.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+    }
+
+    /// The header's rows without its outer frame. (Internal so the debug layout check
+    /// can measure it: inside the clipping frame it would always seem to fit.)
+    var headerContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Title and Photos' album choice side by side, or stacked when narrow.
             ViewThatFits(in: .horizontal) {
@@ -114,19 +125,30 @@ struct ImportView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) {
                     filterControls
+                    groupPicker
                     Spacer(minLength: 8)
                     sizeSlider
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     filterControls
+                    HStack(spacing: 10) {
+                        groupPicker
+                        Spacer(minLength: 8)
+                        sizeSlider
+                    }
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    filterControls
+                    groupPicker
+                    sizeSlider
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    filterControls(compact: true)
+                    groupPicker
                     sizeSlider
                 }
             }
         }
-        .padding(12)
-        // Never let the header push the window wider than it is.
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .clipped()
     }
 
     private var titleBlock: some View {
@@ -158,21 +180,41 @@ struct ImportView: View {
         }
     }
 
+    private var filterControls: some View { filterControls(compact: false) }
+
+    /// `compact`: the All / New only / Date range choice as a pop-up menu, for narrow windows.
     @ViewBuilder
-    private var filterControls: some View {
+    private func filterControls(compact: Bool) -> some View {
         HStack(spacing: 8) {
-            Picker("Show", selection: $filter) {
-                ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
+            if compact {
+                Picker("Show", selection: $filter) {
+                    ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+            } else {
+                Picker("Show", selection: $filter) {
+                    ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
             if filter == .dates {
                 DatePicker("From", selection: $from, displayedComponents: .date).labelsHidden().fixedSize()
                 Text("to").foregroundStyle(.secondary)
                 DatePicker("To", selection: $to, displayedComponents: .date).labelsHidden().fixedSize()
             }
         }
+    }
+
+    private var groupPicker: some View {
+        Picker("Group by", selection: $groupBy) {
+            ForEach(ImportGroup.Period.allCases) { Text($0.title).tag($0.rawValue) }
+        }
+        .fixedSize()
+        .help("Group the photos under month or day headings")
     }
 
     private var sizeSlider: some View {
@@ -205,18 +247,27 @@ struct ImportView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            let shown = photos
+            let groups = Importer.groups(photos, by: ImportGroup.Period(rawValue: groupBy) ?? .month)
+            // On-screen order, so ⇧-click ranges and Select All follow what you see.
+            let shown = groups.flatMap(\.items)
             ScrollView {
                 let live = liveStillNames
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbSize), spacing: 10)], spacing: 10) {
-                    ForEach(shown) { c in
-                        ImportCell(source: source, candidate: c, isSelected: selection.contains(c.id),
-                                   alreadyImported: model.importHistory.contains(c), size: thumbSize,
-                                   isLive: c.isPhoto && live.contains(c.baseName))
-                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.gridSpace)) } action: { frame in
-                                cellFrames.frames[c.id] = frame
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbSize), spacing: 10)], spacing: 10,
+                          pinnedViews: [.sectionHeaders]) {
+                    ForEach(groups) { group in
+                        Section {
+                            ForEach(group.items) { c in
+                                ImportCell(source: source, candidate: c, isSelected: selection.contains(c.id),
+                                           alreadyImported: model.importHistory.contains(c), size: thumbSize,
+                                           isLive: c.isPhoto && live.contains(c.baseName))
+                                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.gridSpace)) } action: { frame in
+                                        cellFrames.frames[c.id] = frame
+                                    }
+                                    .onTapGesture { click(c.id, in: shown) }
                             }
-                            .onTapGesture { click(c.id, in: shown) }
+                        } header: {
+                            if !group.title.isEmpty { groupHeader(group) }
+                        }
                     }
                 }
                 .padding(12)
@@ -340,6 +391,30 @@ struct ImportView: View {
     }
 
     static let gridSpace = "importGrid"
+
+    /// A pinned date heading with its count and a button to take or drop the whole group.
+    private func groupHeader(_ group: ImportGroup) -> some View {
+        let ids = Set(group.items.map(\.id))
+        let all = ids.isSubset(of: selection)
+        let some = !all && !ids.isDisjoint(with: selection)
+        return HStack(spacing: 10) {
+            Text(group.title).font(.headline)
+            Text(group.items.count == 1 ? "1 photo" : "\(group.items.count.formatted()) photos")
+                .font(.callout).foregroundStyle(.secondary)
+            if some {
+                Text("\(ids.intersection(selection).count) selected").font(.callout).foregroundStyle(Color.accentColor)
+            }
+            Spacer()
+            Button(all ? "Deselect" : "Select") {
+                if all { selection.subtract(ids) } else { selection.formUnion(ids) }
+            }
+            .controlSize(.small)
+            .help(all ? "Leave out every photo in \(group.title)" : "Pick every photo in \(group.title)")
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
 
     /// Click toggles a photo; ⇧-click selects everything from the last photo clicked.
     private func click(_ id: ImportCandidate.ID, in shown: [ImportCandidate]) {

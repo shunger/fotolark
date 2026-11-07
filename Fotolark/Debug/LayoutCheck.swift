@@ -52,6 +52,10 @@ enum LayoutCheck {
         try? await Task.sleep(for: .seconds(1))
         for w in [530.0, 800, 1200] {
             check("import", ImportView(model: model, source: source), width: w, height: 700)
+            // The header clips, so measured inside the whole screen it always "fits";
+            // its contents are measured alone, at the width they get (column minus padding).
+            check("import header", ImportView(model: model, source: source).headerContent,
+                  width: w - 271 - 24, height: 300)
         }
 
         // Editing panel: every section open in turn, and every tool.

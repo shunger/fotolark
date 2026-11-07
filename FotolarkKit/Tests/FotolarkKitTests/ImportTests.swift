@@ -114,3 +114,35 @@ struct DeviceTypeTests {
         #expect(placed.verified)
     }
 }
+
+@Suite("Import screen date groups")
+struct ImportGroupTests {
+    func c(_ name: String, _ iso: String?) -> ImportCandidate {
+        let f = ISO8601DateFormatter()
+        f.timeZone = TimeZone(identifier: "UTC")
+        return ImportCandidate(id: name, name: name, fileSize: 1, date: iso.flatMap { f.date(from: $0) }, typeIdentifier: "public.jpeg")
+    }
+
+    var utc: Calendar {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        return cal
+    }
+
+    @Test func groupsByMonthNewestFirstWithUndatedLast() {
+        let items = [c("a", "2020-03-14T10:00:00Z"), c("b", nil), c("c", "2021-07-01T09:00:00Z"),
+                     c("d", "2020-03-02T08:00:00Z"), c("e", "2020-04-01T00:30:00Z")]
+        let g = Importer.groups(items, by: .month, calendar: utc)
+        #expect(g.map { $0.items.map(\.name) } == [["c"], ["e"], ["a", "d"], ["b"]])
+        #expect(g.last?.title == "No date")
+        #expect(g[2].title.contains("2020"))
+    }
+
+    @Test func groupsByDayAndNotAtAll() {
+        let items = [c("a", "2020-03-14T10:00:00Z"), c("b", "2020-03-14T23:00:00Z"), c("c", "2020-03-15T01:00:00Z")]
+        #expect(Importer.groups(items, by: .day, calendar: utc).map(\.items.count) == [1, 2])
+        let none = Importer.groups(items, by: .none, calendar: utc)
+        #expect(none.count == 1 && none[0].items.count == 3)
+        #expect(Importer.groups([], by: .month).isEmpty)
+    }
+}

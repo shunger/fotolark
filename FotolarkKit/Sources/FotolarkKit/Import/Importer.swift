@@ -211,3 +211,55 @@ func isHEICFile(_ url: URL) -> Bool {
           let id = CGImageSourceGetType(src) as String?, let type = UTType(id) else { return false }
     return type.conforms(to: .heic) || type.conforms(to: .heif)
 }
+
+/// Photos on a device grouped under a date heading, for the import screen.
+public struct ImportGroup: Identifiable, Sendable {
+    public enum Period: String, CaseIterable, Identifiable, Sendable {
+        case month, day, none
+        public var id: String { rawValue }
+        public var title: String {
+            switch self {
+            case .month: "Month"
+            case .day: "Day"
+            case .none: "None"
+            }
+        }
+    }
+
+    public let id: String
+    /// "March 2020", "Saturday, March 14, 2020", "No date", or "" when not grouped.
+    public let title: String
+    public let items: [ImportCandidate]
+}
+
+extension Importer {
+    /// Groups photos by when they were taken, newest first; photos without a date come
+    /// last. Within a group the photos keep their order.
+    public static func groups(_ items: [ImportCandidate], by period: ImportGroup.Period,
+                              calendar: Calendar = .current) -> [ImportGroup] {
+        guard period != .none else { return items.isEmpty ? [] : [ImportGroup(id: "all", title: "", items: items)] }
+        let f = DateFormatter()
+        f.calendar = calendar
+        f.timeZone = calendar.timeZone
+        f.setLocalizedDateFormatFromTemplate(period == .month ? "MMMM yyyy" : "EEEE MMMM d yyyy")
+        var order: [String] = []
+        var byKey: [String: (title: String, start: Date, items: [ImportCandidate])] = [:]
+        var undated: [ImportCandidate] = []
+        for c in items {
+            guard let date = c.date else { undated.append(c); continue }
+            let parts: Set<Calendar.Component> = period == .month ? [.year, .month] : [.year, .month, .day]
+            let start = calendar.date(from: calendar.dateComponents(parts, from: date)) ?? date
+            let key = String(Int(start.timeIntervalSince1970))
+            if byKey[key] == nil {
+                order.append(key)
+                byKey[key] = (f.string(from: start), start, [])
+            }
+            byKey[key]?.items.append(c)
+        }
+        var out = order.compactMap { k in byKey[k].map { (k, $0) } }
+            .sorted { $0.1.start > $1.1.start }
+            .map { ImportGroup(id: $0.0, title: $0.1.title, items: $0.1.items) }
+        if !undated.isEmpty { out.append(ImportGroup(id: "undated", title: "No date", items: undated)) }
+        return out
+    }
+}
