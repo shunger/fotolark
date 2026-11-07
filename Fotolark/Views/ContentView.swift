@@ -35,6 +35,15 @@ struct ContentView: View {
             case .welcome: WelcomeTour(model: model)
             }
         }
+        .overlay(alignment: .bottom) {
+            if let notice = model.notice {
+                NoticeView(model: model, notice: notice)
+                    .padding(.bottom, 18)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .id(notice.id)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: model.notice)
         .alert("Something went wrong", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -244,5 +253,55 @@ struct EmptyStateView: View {
                 .foregroundStyle(isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.35))
                 .padding(24)
         }
+    }
+}
+
+/// "Done: Import 3,365 from iPhone" with Show and Details; fades away on its own
+/// unless the pointer is over it.
+struct NoticeView: View {
+    @Bindable var model: AppModel
+    let notice: AppModel.Notice
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: notice.hasProblems ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(notice.hasProblems ? Color.orange : Color.green)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(notice.text).lineLimit(1).truncationMode(.middle)
+                if let detail = notice.detail {
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if let folder = notice.folder {
+                Button("Show") { model.showFolder(folder); model.notice = nil }
+            }
+            if notice.hasProblems {
+                Button("Details") { model.jobs.showListRequests += 1; model.notice = nil }
+            }
+            Button { model.notice = nil } label: { Image(systemName: "xmark") }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 560)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary))
+        .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
+        .onHover { hovering = $0 }
+        .task(id: notice.id) {
+            // Linger a little longer when something needs a look.
+            let seconds = notice.hasProblems ? 12.0 : 7.0
+            var waited = 0.0
+            while waited < seconds {
+                try? await Task.sleep(for: .milliseconds(250))
+                if !hovering { waited += 0.25 }
+            }
+            if model.notice?.id == notice.id { model.notice = nil }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(notice.text)
     }
 }

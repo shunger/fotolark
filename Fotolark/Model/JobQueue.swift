@@ -56,6 +56,10 @@ final class JobQueue {
     private(set) var jobs: [Job] = []
     /// Called after a job finishes or is undone, so the grid can refresh.
     var onChange: (() -> Void)?
+    /// Called once when a job finishes or is stopped (for the "done" notice).
+    var onFinished: ((Job) -> Void)?
+    /// Bumped to open the Jobs list (e.g. from a notice's Details button).
+    var showListRequests = 0
 
     var runningCount: Int { jobs.filter { $0.state == .running }.count }
 
@@ -110,6 +114,7 @@ final class JobQueue {
         job.undoSteps = result.undo
         job.state = result.wasCancelled || job.control.isCancelled ? .cancelled : .finished
         onChange?()
+        onFinished?(job)
     }
 
     func cancel(_ job: Job) {
@@ -156,6 +161,7 @@ struct JobsButton: View {
             JobsList(model: model)
         }
         .onChange(of: queue.jobs.first?.id) { if queue.jobs.first != nil { isShown = true } }
+        .onChange(of: queue.showListRequests) { isShown = true }
     }
 }
 

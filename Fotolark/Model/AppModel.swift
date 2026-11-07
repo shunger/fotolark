@@ -123,6 +123,7 @@ final class AppModel {
         library.onFoldersChanged = { [weak self] changed in self?.foldersChanged(changed) }
         library.onRootsChanged = { [weak self] in self?.scheduleReindex(after: .milliseconds(200)) }
         jobs.onChange = { [weak self] in self?.reloadPhotos() }
+        jobs.onFinished = { [weak self] job in self?.announce(job) }
         if let data = UserDefaults.standard.data(forKey: "export.presets"),
            let saved = try? JSONDecoder().decode([ExportPreset].self, from: data) {
             customPresets = saved
@@ -1077,6 +1078,41 @@ final class AppModel {
                 try png.write(to: target, options: .withoutOverwriting)
                 return [.removeCreatedFile(target)]
             }
+        }
+    }
+
+    // MARK: Notices
+
+    /// A short message at the bottom of the window when background work finishes.
+    struct Notice: Identifiable, Equatable {
+        let id = UUID()
+        let text: String
+        let detail: String?
+        let folder: URL?
+        let hasProblems: Bool
+    }
+
+    var notice: Notice?
+
+    private func announce(_ job: JobQueue.Job) {
+        let stopped = job.state == .cancelled
+        var detail: [String] = []
+        if stopped { detail.append("stopped after \(job.done.formatted()) of \(job.total.formatted())") }
+        if !job.skipped.isEmpty { detail.append("\(job.skipped.count.formatted()) skipped") }
+        notice = Notice(text: (stopped ? "Stopped: " : "Done: ") + job.title,
+                        detail: detail.isEmpty ? nil : detail.joined(separator: ", "),
+                        folder: job.outputFolder, hasProblems: !job.skipped.isEmpty)
+    }
+
+    /// Shows a folder: in Fotolark if it's in your folders, otherwise in Finder.
+    func showFolder(_ url: URL) {
+        let path = url.standardizedFileURL.path
+        let inLibrary = library.resolvedURLs.values.contains { path == $0.path || path.hasPrefix($0.path + "/") }
+        if inLibrary {
+            closeEditor()
+            source = .folder(url.standardizedFileURL)
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
         }
     }
 
