@@ -7,6 +7,8 @@ import UniformTypeIdentifiers
 struct BrowserView: View {
     @Bindable var model: AppModel
     @AppStorage("showInfo") private var showInfo = true
+    @AppStorage("grid.showNames") private var showNames = false
+    @AppStorage("grid.square") private var squareThumbnails = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -118,6 +120,7 @@ struct BrowserView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             PhotoGridView(photos: model.photos, recipes: model.recipes, labels: model.labels,
+                          showNames: showNames, squareThumbnails: squareThumbnails,
                           sections: model.sections,
                           selection: $model.selection,
                           thumbnailSize: model.thumbnailSize, thumbnails: model.thumbnails,

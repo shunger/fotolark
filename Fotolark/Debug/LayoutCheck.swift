@@ -102,6 +102,23 @@ enum LayoutCheck {
             print("LAYOUT \(ok ? "pass" : "FAIL") undo history survives reopening")
         }
 
+        // The photo grid, with a rating, a pick, a reject and an edit, plain and square.
+        let scanned = photos.compactMap { url -> ScannedPhoto? in
+            guard let v = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]) else { return nil }
+            return ScannedPhoto(url: url, fileSize: Int64(v.fileSize ?? 0), modified: v.contentModificationDate ?? Date(),
+                                created: v.contentModificationDate ?? Date())
+        }
+        let gridLabels: [URL: PhotoLabels] = [photos[0]: PhotoLabels(rating: 4), photos[1]: PhotoLabels(flag: .pick),
+                                              photos[2]: PhotoLabels(flag: .reject)]
+        let gridRecipes = [photos[3]: EditRecipe().setting(.straighten(degrees: 2))]
+        for (square, names) in [(false, false), (true, false), (false, true)] {
+            let grid = PhotoGridView(photos: scanned, recipes: gridRecipes, labels: gridLabels, showNames: names,
+                                     squareThumbnails: square, selection: .constant([photos[1]]), thumbnailSize: 150,
+                                     thumbnails: model.thumbnails, promises: model.promises, onOpen: { _ in },
+                                     makeMenu: { NSMenu() })
+            await snapshotLive(grid, name: "grid\(square ? " square" : "")\(names ? " names" : "") @530", size: CGSize(width: 530, height: 380))
+        }
+
         // Sheets and windows at their own size, which must fit a small (1280 × 800) screen.
         let urls = photos
         check("export sheet", ExportSheet(model: model, photos: urls), width: 1200, height: 740, fitsScreen: true)
@@ -162,6 +179,26 @@ enum LayoutCheck {
             let file = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "") + " (\(suffix)).png"
             try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent(file))
         }
+    }
+
+    /// For views that fill in over time (the grid's thumbnails): shown in a window for
+    /// a moment before the picture is taken.
+    private static func snapshotLive<V: View>(_ view: V, name: String, size: CGSize) async {
+        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height)
+            .background(Color(nsColor: .windowBackgroundColor)))
+        host.frame = CGRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.contentView = host
+        window.orderFrontRegardless()
+        try? await Task.sleep(for: .seconds(2))
+        host.layoutSubtreeIfNeeded()
+        if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            host.cacheDisplay(in: host.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("\(name) (light).png"))
+        }
+        window.orderOut(nil)
+        print("LAYOUT pass ok \(name) (picture only)")
     }
 
     private static func writeSample(_ url: URL, portrait: Bool, hue: Double) {

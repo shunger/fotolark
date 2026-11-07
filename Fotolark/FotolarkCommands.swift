@@ -8,6 +8,8 @@ struct FotolarkCommands: Commands {
     @AppStorage(PhotoBackground.key) private var backdrop = PhotoBackground.current
     @AppStorage("showInfo") private var showInfo = true
     @AppStorage("showFilmstrip") private var showFilmstrip = true
+    @AppStorage("grid.showNames") private var showNames = false
+    @AppStorage("grid.square") private var squareThumbnails = false
 
     private var editor: PhotoEditor? { model.editor }
 
@@ -196,6 +198,8 @@ struct FotolarkCommands: Commands {
             Toggle("Show Info", isOn: $showInfo)
                 .keyboardShortcut("i")
             Toggle("Show Filmstrip", isOn: $showFilmstrip)
+            Toggle("Show File Names", isOn: $showNames)
+            Toggle("Square Thumbnails", isOn: $squareThumbnails)
             Button(editor?.splitCompare == true ? "Hide Before and After" : "Show Before and After  (Y)") {
                 editor?.splitCompare.toggle()
             }

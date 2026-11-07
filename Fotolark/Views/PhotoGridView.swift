@@ -9,6 +9,10 @@ struct PhotoGridView: NSViewRepresentable {
     let photos: [ScannedPhoto]
     let recipes: [URL: EditRecipe]
     var labels: [URL: PhotoLabels] = [:]
+    /// File names under every photo (otherwise on hover).
+    var showNames = false
+    /// Thumbnails cropped to even squares.
+    var squareThumbnails = false
     /// Titled groups (the timeline's months); nil shows one plain grid.
     var sections: [GridSection]? = nil
     @Binding var selection: Set<URL>
@@ -70,6 +74,7 @@ struct PhotoGridView: NSViewRepresentable {
         private var shownRecipes: [URL: EditRecipe] = [:]
         private var shownLabels: [URL: PhotoLabels] = [:]
         private var itemSize: CGFloat = 0
+        private var shownStyle: [Bool] = []
         private var isApplyingSelection = false
 
         init(_ parent: PhotoGridView) { self.parent = parent }
@@ -81,7 +86,8 @@ struct PhotoGridView: NSViewRepresentable {
                 let item = collectionView.makeItem(withIdentifier: PhotoGridItem.identifier, for: indexPath)
                 if let self, let cell = item as? PhotoGridItem, let photo = self.byURL[url] {
                     cell.configure(photo: photo, recipe: self.parent.recipes[url], labels: self.parent.labels[url],
-                                   store: self.parent.thumbnails, pointSize: self.itemSize)
+                                   store: self.parent.thumbnails, pointSize: self.itemSize,
+                                   showNames: self.parent.showNames, square: self.parent.squareThumbnails)
                 }
                 return item
             }
@@ -101,8 +107,9 @@ struct PhotoGridView: NSViewRepresentable {
             self.parent = parent
             guard let collection, let dataSource else { return }
 
-            if itemSize != parent.thumbnailSize {
+            if itemSize != parent.thumbnailSize || shownStyle != [parent.showNames, parent.squareThumbnails] {
                 itemSize = parent.thumbnailSize
+                shownStyle = [parent.showNames, parent.squareThumbnails]
                 collection.collectionViewLayout?.invalidateLayout()
                 refreshVisible()
             }
@@ -151,7 +158,8 @@ struct PhotoGridView: NSViewRepresentable {
                       let photo = byURL[url],
                       let cell = collection.item(at: indexPath) as? PhotoGridItem else { continue }
                 cell.configure(photo: photo, recipe: parent.recipes[url], labels: parent.labels[url],
-                               store: parent.thumbnails, pointSize: itemSize)
+                               store: parent.thumbnails, pointSize: itemSize,
+                               showNames: parent.showNames, square: parent.squareThumbnails)
             }
         }
 
@@ -186,7 +194,7 @@ struct PhotoGridView: NSViewRepresentable {
 
         func collectionView(_ collectionView: NSCollectionView, layout: NSCollectionViewLayout,
                             sizeForItemAt indexPath: IndexPath) -> NSSize {
-            NSSize(width: itemSize, height: itemSize + PhotoGridItem.labelHeight)
+            NSSize(width: itemSize, height: itemSize + (parent.showNames ? PhotoGridItem.labelHeight : 0))
         }
 
         func collectionView(_ collectionView: NSCollectionView, didEndDisplaying item: NSCollectionViewItem,
@@ -307,94 +315,106 @@ final class GridCollectionView: NSCollectionView {
     }
 }
 
-/// One cell: the thumbnail (with edits applied), the file name and an "edited" mark.
+/// One cell: the thumbnail (with edits applied), small badges for stars, flag and
+/// edits, and the file name (always, or only on hover).
 final class PhotoGridItem: NSCollectionViewItem {
     static let identifier = NSUserInterfaceItemIdentifier("PhotoGridItem")
     static let labelHeight: CGFloat = 22
 
-    private let thumb = NSImageView()
+    private let photo = CALayer()
+    private let shimmer = CAGradientLayer()
     private let label = NSTextField(labelWithString: "")
-    private let badge = NSImageView()
+    private let hoverName = NSTextField(labelWithString: "")
+    private let edited = Badge(symbol: "slider.horizontal.3", tint: .white, fill: NSColor.black.withAlphaComponent(0.55))
     private let stars = NSTextField(labelWithString: "")
-    private let flag = NSImageView()
+    private let flag = Badge(symbol: "flag.fill", tint: .white, fill: .systemGreen)
     private let selectionLayer = CALayer()
     private var loadTask: Task<Void, Never>?
     private var currentURL: URL?
+    private var showNames = false
+    private var square = false
+    private var hovering = false { didSet { updateHover() } }
 
     override func loadView() {
-        let root = NSView()
+        let root = HoverView()
         root.wantsLayer = true
+        root.onHover = { [weak self] in self?.hovering = $0 }
 
-        selectionLayer.cornerRadius = 8
+        selectionLayer.cornerRadius = 9
         root.layer?.addSublayer(selectionLayer)
 
-        thumb.imageScaling = .scaleProportionallyUpOrDown
-        thumb.wantsLayer = true
-        thumb.layer?.shadowOpacity = 0.25
-        thumb.layer?.shadowRadius = 2
-        thumb.layer?.shadowOffset = CGSize(width: 0, height: -1)
-        thumb.translatesAutoresizingMaskIntoConstraints = false
+        photo.cornerRadius = 4
+        photo.masksToBounds = true
+        photo.backgroundColor = NSColor.quaternaryLabelColor.cgColor
+        root.layer?.addSublayer(photo)
+
+        // A soft light band sweeping across while the thumbnail loads.
+        shimmer.colors = [NSColor.white.withAlphaComponent(0).cgColor, NSColor.white.withAlphaComponent(0.18).cgColor,
+                          NSColor.white.withAlphaComponent(0).cgColor]
+        shimmer.startPoint = CGPoint(x: 0, y: 0.5)
+        shimmer.endPoint = CGPoint(x: 1, y: 0.5)
+        shimmer.locations = [0, 0.5, 1]
+        photo.addSublayer(shimmer)
 
         label.lineBreakMode = .byTruncatingMiddle
         label.alignment = .center
         label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         label.textColor = .secondaryLabelColor
-        label.translatesAutoresizingMaskIntoConstraints = false
 
-        badge.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Edited")
-        badge.contentTintColor = .white
-        badge.wantsLayer = true
-        badge.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-        badge.layer?.cornerRadius = 9
-        badge.imageScaling = .scaleProportionallyDown
-        badge.translatesAutoresizingMaskIntoConstraints = false
-        badge.toolTip = "Edited"
+        hoverName.lineBreakMode = .byTruncatingMiddle
+        hoverName.alignment = .center
+        hoverName.font = .systemFont(ofSize: 11, weight: .medium)
+        hoverName.textColor = .white
+        hoverName.wantsLayer = true
+        hoverName.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
+        hoverName.layer?.cornerRadius = 4
+        hoverName.isHidden = true
 
-        stars.font = .systemFont(ofSize: 11, weight: .semibold)
+        stars.font = .systemFont(ofSize: 10, weight: .semibold)
         stars.textColor = .white
         stars.wantsLayer = true
-        stars.drawsBackground = false
         stars.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
         stars.layer?.cornerRadius = 4
-        stars.translatesAutoresizingMaskIntoConstraints = false
+        stars.alignment = .center
 
-        flag.wantsLayer = true
-        flag.layer?.cornerRadius = 9
-        flag.imageScaling = .scaleProportionallyDown
-        flag.contentTintColor = .white
-        flag.translatesAutoresizingMaskIntoConstraints = false
-
-        root.addSubview(thumb)
-        root.addSubview(label)
-        root.addSubview(badge)
-        root.addSubview(stars)
-        root.addSubview(flag)
-        NSLayoutConstraint.activate([
-            thumb.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 6),
-            thumb.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -6),
-            thumb.topAnchor.constraint(equalTo: root.topAnchor, constant: 6),
-            thumb.bottomAnchor.constraint(equalTo: label.topAnchor, constant: -2),
-            label.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 4),
-            label.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -4),
-            label.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -3),
-            label.heightAnchor.constraint(equalToConstant: 16),
-            badge.widthAnchor.constraint(equalToConstant: 18),
-            badge.heightAnchor.constraint(equalToConstant: 18),
-            badge.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
-            badge.bottomAnchor.constraint(equalTo: label.topAnchor, constant: -6),
-            stars.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
-            stars.bottomAnchor.constraint(equalTo: label.topAnchor, constant: -6),
-            flag.widthAnchor.constraint(equalToConstant: 18),
-            flag.heightAnchor.constraint(equalToConstant: 18),
-            flag.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
-            flag.topAnchor.constraint(equalTo: root.topAnchor, constant: 8),
-        ])
+        edited.toolTip = "Edited"
+        for v in [label, edited, stars, flag, hoverName] as [NSView] { root.addSubview(v) }
         view = root
+    }
+
+    /// Where the photo sits in the cell.
+    private var photoArea: CGRect {
+        let b = view.bounds
+        let bottom = showNames ? Self.labelHeight : 0
+        return CGRect(x: 6, y: bottom + 6, width: b.width - 12, height: b.height - bottom - 12)
+    }
+
+    /// The picture itself inside that area (smaller than it when shown whole).
+    private var pictureRect: CGRect {
+        let area = photoArea
+        guard !square, let image = photo.contents.map({ $0 as! CGImage }) else { return area }
+        let a = CGFloat(image.width) / CGFloat(max(image.height, 1))
+        var w = area.width, h = area.height
+        if a > w / h { h = w / a } else { w = h * a }
+        return CGRect(x: area.midX - w / 2, y: area.midY - h / 2, width: w, height: h).integral
     }
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        selectionLayer.frame = view.bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        selectionLayer.frame = view.bounds.insetBy(dx: 1, dy: 1)
+        photo.frame = pictureRect
+        shimmer.frame = CGRect(x: -photo.bounds.width, y: 0, width: photo.bounds.width * 3, height: photo.bounds.height)
+        CATransaction.commit()
+        let pic = pictureRect
+        label.frame = CGRect(x: 4, y: 3, width: view.bounds.width - 8, height: 16)
+        label.isHidden = !showNames
+        let starsWidth = stars.intrinsicContentSize.width + 10
+        stars.frame = CGRect(x: pic.minX + 4, y: pic.minY + 4, width: min(starsWidth, pic.width - 8), height: 16)
+        edited.frame = CGRect(x: pic.maxX - 22, y: pic.minY + 4, width: 18, height: 16)
+        flag.frame = CGRect(x: pic.maxX - 22, y: pic.maxY - 20, width: 18, height: 16)
+        hoverName.frame = CGRect(x: pic.minX + 4, y: pic.minY + 24, width: pic.width - 8, height: 16)
     }
 
     override var isSelected: Bool {
@@ -405,57 +425,99 @@ final class PhotoGridItem: NSCollectionViewItem {
         didSet { updateSelection() }
     }
 
+    /// A rounded outline in the accent color; the photo itself isn't tinted.
     private func updateSelection() {
         let on = isSelected || highlightState == .forSelection
-        selectionLayer.backgroundColor = on ? NSColor.selectedContentBackgroundColor.withAlphaComponent(0.35).cgColor : nil
+        selectionLayer.borderWidth = on ? 3 : 0
+        selectionLayer.borderColor = NSColor.controlAccentColor.cgColor
+        selectionLayer.backgroundColor = on ? NSColor.controlAccentColor.withAlphaComponent(0.1).cgColor : nil
         label.textColor = on ? .labelColor : .secondaryLabelColor
         view.setAccessibilitySelected(on)
     }
 
-    func configure(photo: ScannedPhoto, recipe: EditRecipe?, labels: PhotoLabels?, store: ThumbnailStore,
-                   pointSize: CGFloat) {
-        label.stringValue = photo.name
-        badge.isHidden = recipe == nil
+    private func updateHover() {
+        hoverName.isHidden = showNames || !hovering
+        view.layer?.backgroundColor = hovering ? NSColor.labelColor.withAlphaComponent(0.04).cgColor : nil
+    }
+
+    func configure(photo scanned: ScannedPhoto, recipe: EditRecipe?, labels: PhotoLabels?, store: ThumbnailStore,
+                   pointSize: CGFloat, showNames: Bool, square: Bool) {
+        self.showNames = showNames
+        self.square = square
+        photo.contentsGravity = square ? .resizeAspectFill : .resizeAspect
+        label.stringValue = scanned.name
+        hoverName.stringValue = scanned.name
+        edited.isHidden = recipe == nil
         let l = labels ?? PhotoLabels()
         stars.isHidden = l.rating == 0
-        stars.stringValue = " " + String(repeating: "★", count: l.rating) + " "
+        stars.stringValue = String(repeating: "★", count: l.rating)
         switch l.flag {
         case .none:
             flag.isHidden = true
         case .pick:
             flag.isHidden = false
-            flag.image = NSImage(systemSymbolName: "flag.fill", accessibilityDescription: "Pick")
-            flag.layer?.backgroundColor = NSColor.systemGreen.cgColor
+            flag.set(symbol: "flag.fill", fill: .systemGreen, description: "Pick")
         case .reject:
             flag.isHidden = false
-            flag.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Rejected")
-            flag.layer?.backgroundColor = NSColor.systemRed.cgColor
+            flag.set(symbol: "xmark", fill: .systemRed, description: "Rejected")
         }
         // Rejects fade back so the keepers stand out.
-        thumb.alphaValue = l.flag == .reject ? 0.4 : 1
+        photo.opacity = l.flag == .reject ? 0.4 : 1
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(.image)
-        var spoken = [photo.name]
+        var spoken = [scanned.name]
         if recipe != nil { spoken.append("edited") }
         if l.rating > 0 { spoken.append(l.rating == 1 ? "1 star" : "\(l.rating) stars") }
         if l.flag == .pick { spoken.append("pick") } else if l.flag == .reject { spoken.append("rejected") }
         if !l.tags.isEmpty { spoken.append("tags: " + l.tags.joined(separator: ", ")) }
         view.setAccessibilityLabel(spoken.joined(separator: ", "))
         view.toolTip = l.tags.isEmpty ? nil : l.tags.joined(separator: ", ")
+        updateHover()
 
         let pixels = Int(pointSize * (view.window?.backingScaleFactor ?? 2))
-        if currentURL != photo.url { thumb.image = nil }
-        currentURL = photo.url
+        if currentURL != scanned.url { show(nil, animated: false) }
+        currentURL = scanned.url
         loadTask?.cancel()
-        if let cached = store.cachedThumbnail(for: photo, recipe: recipe, maxPixelSize: pixels) {
-            thumb.image = NSImage(cgImage: cached, size: .zero)
+        if let cached = store.cachedThumbnail(for: scanned, recipe: recipe, maxPixelSize: pixels) {
+            show(cached, animated: false)
             return
         }
         loadTask = Task { [weak self] in
-            let image = await store.thumbnail(for: photo, recipe: recipe, maxPixelSize: pixels)
-            guard let self, !Task.isCancelled, self.currentURL == photo.url, let image else { return }
-            self.thumb.image = NSImage(cgImage: image, size: .zero)
+            let image = await store.thumbnail(for: scanned, recipe: recipe, maxPixelSize: pixels)
+            guard let self, !Task.isCancelled, self.currentURL == scanned.url, let image else { return }
+            self.show(image, animated: true)
         }
+        view.needsLayout = true
+    }
+
+    /// Puts the thumbnail in (fading in when it just arrived), or the loading shimmer.
+    private func show(_ image: CGImage?, animated: Bool) {
+        if animated {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = 0.2
+            photo.add(fade, forKey: "fade")
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(!animated)
+        photo.contents = image
+        photo.backgroundColor = image == nil ? NSColor.quaternaryLabelColor.cgColor : nil
+        CATransaction.commit()
+        if image == nil {
+            shimmer.isHidden = false
+            if shimmer.animation(forKey: "sweep") == nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                let sweep = CABasicAnimation(keyPath: "transform.translation.x")
+                sweep.fromValue = -photo.bounds.width
+                sweep.toValue = photo.bounds.width
+                sweep.duration = 1.3
+                sweep.repeatCount = .infinity
+                shimmer.add(sweep, forKey: "sweep")
+            }
+        } else {
+            shimmer.removeAllAnimations()
+            shimmer.isHidden = true
+        }
+        view.needsLayout = true
     }
 
     func cancelLoading() {
@@ -465,7 +527,52 @@ final class PhotoGridItem: NSCollectionViewItem {
     override func prepareForReuse() {
         super.prepareForReuse()
         loadTask?.cancel()
-        thumb.image = nil
+        show(nil, animated: false)
         currentURL = nil
+        hovering = false
     }
+}
+
+/// A small rounded badge with a symbol (edited, pick, reject).
+final class Badge: NSView {
+    private let icon = NSImageView()
+
+    init(symbol: String, tint: NSColor, fill: NSColor) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 4
+        layer?.backgroundColor = fill.cgColor
+        icon.contentTintColor = tint
+        icon.imageScaling = .scaleProportionallyDown
+        icon.symbolConfiguration = .init(pointSize: 9, weight: .bold)
+        icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        addSubview(icon)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func set(symbol: String, fill: NSColor, description: String) {
+        icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
+        layer?.backgroundColor = fill.cgColor
+    }
+
+    override func layout() {
+        super.layout()
+        icon.frame = bounds.insetBy(dx: 3, dy: 2)
+    }
+}
+
+/// Reports the pointer entering and leaving (for showing the name on hover).
+final class HoverView: NSView {
+    var onHover: ((Bool) -> Void)?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
