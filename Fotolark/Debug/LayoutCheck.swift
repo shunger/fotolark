@@ -89,6 +89,19 @@ enum LayoutCheck {
         check("canvas: before and after", CanvasView(editor: editor, model: model), width: 800, height: 600)
         editor.splitCompare = false
 
+        // Undo survives reopening (as after quitting): a fresh editor picks the history up.
+        let histories = HistoryStore(directory: dir.appendingPathComponent("History"))
+        if let first = try? PhotoEditor(url: photos[1], engine: model.engine, store: store, historyStore: histories) {
+            try? await Task.sleep(for: .milliseconds(500))
+            first.setAdjustment(\.exposure, to: 0.5, label: "Exposure")
+            first.commitPending()
+            first.saveNow()
+            let again = try? PhotoEditor(url: photos[1], engine: model.engine, store: store, historyStore: histories)
+            let ok = again?.history.canUndo == true && again?.history.undoLabel == "Exposure"
+            if !ok { overflowCount += 1 }
+            print("LAYOUT \(ok ? "pass" : "FAIL") undo history survives reopening")
+        }
+
         // Sheets and windows at their own size, which must fit a small (1280 × 800) screen.
         let urls = photos
         check("export sheet", ExportSheet(model: model, photos: urls), width: 1200, height: 740, fitsScreen: true)

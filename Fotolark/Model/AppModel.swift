@@ -77,6 +77,8 @@ final class AppModel {
     let devices = DeviceBrowser()
     let importHistory: ImportHistory
     let albumStore: AlbumStore
+    /// Undo history for each photo, kept between launches.
+    let historyStore: HistoryStore
     let watchFolders: WatchFolders
     let index: LibraryIndex
     let analysis: AnalysisStore
@@ -111,6 +113,7 @@ final class AppModel {
         dates = DateTakenCache(fileURL: caches.appendingPathComponent("DatesTaken.json"))
         importHistory = ImportHistory(fileURL: support.appendingPathComponent("ImportHistory.json"))
         albumStore = AlbumStore(fileURL: support.appendingPathComponent("Albums.json"))
+        historyStore = HistoryStore(directory: support.appendingPathComponent("History", isDirectory: true))
         watchFolders = WatchFolders(supportDirectory: support, engine: engine)
         albums = albumStore.albums
         index = LibraryIndex(fileURL: caches.appendingPathComponent("LibraryIndex.json"))
@@ -317,7 +320,8 @@ final class AppModel {
         rememberHistory()
         zoomScale = nil
         do {
-            let e = try PhotoEditor(url: url, engine: engine, store: store, previous: histories[url])
+            let e = try PhotoEditor(url: url, engine: engine, store: store, previous: histories[url],
+                                    historyStore: historyStore)
             e.onSave = { [weak self] url, recipe in
                 self?.recipes[url] = recipe.isEmpty ? nil : recipe
             }

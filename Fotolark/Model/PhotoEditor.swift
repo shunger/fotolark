@@ -78,7 +78,11 @@ final class PhotoEditor {
 
     /// `previous` is this photo's history from earlier in the session; it's picked up
     /// again when the saved edits still match where it left off.
-    init(url: URL, engine: EditEngine, store: RecipeStore, previous: EditHistory? = nil) throws {
+    /// Where undo history is kept between launches.
+    private var historyStore: HistoryStore?
+
+    init(url: URL, engine: EditEngine, store: RecipeStore, previous: EditHistory? = nil,
+         historyStore: HistoryStore? = nil) throws {
         self.url = url
         self.engine = engine
         self.store = store
@@ -86,8 +90,12 @@ final class PhotoEditor {
         let record = store.loadRecord(for: url)
         let saved = record.recipe
         versions = record.versions
+        self.historyStore = historyStore
         if let previous, previous.current == saved {
             history = previous
+        } else if let kept = historyStore?.load(for: url, matching: saved) {
+            // Picked up from before Fotolark was last quit.
+            history = kept
         } else {
             history = EditHistory(initial: saved, label: saved.isEmpty ? "Original" : "Saved edits")
         }
@@ -709,11 +717,13 @@ final class PhotoEditor {
         let recipe = history.current
         let url = url
         let store = store
+        let history = history, historyStore = historyStore
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
             await Task.detached(priority: .utility) {
                 _ = try? store.save(recipe, for: url)
+                historyStore?.save(history, for: url)
             }.value
             self?.onSave?(url, recipe)
         }
@@ -725,6 +735,7 @@ final class PhotoEditor {
         saveTask?.cancel()
         saveTask = nil
         _ = try? store.save(history.current, for: url)
+        historyStore?.save(history, for: url)
         onSave?(url, history.current)
     }
 
