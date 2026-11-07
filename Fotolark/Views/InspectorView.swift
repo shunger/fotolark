@@ -341,6 +341,7 @@ struct CropPanel: View {
                     Text("Portrait").tag(true)
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
             }
 
             HStack {
@@ -524,14 +525,13 @@ struct RetouchPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Retouch").font(.headline)
-            Picker("Tool", selection: $editor.retouchTool) {
-                Text("Spot heal").tag(RetouchStroke.Tool.heal)
-                Text("Clone").tag(RetouchStroke.Tool.clone)
-                Text("Soften skin").tag(RetouchStroke.Tool.soften)
-                Text("Remove").tag(RetouchStroke.Tool.remove)
+            // Two by two, so the four tools fit the panel's width.
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
+                RetouchToolButton(editor: editor, tool: .heal, title: "Spot heal", symbol: "bandage")
+                RetouchToolButton(editor: editor, tool: .clone, title: "Clone", symbol: "plus.square.on.square")
+                RetouchToolButton(editor: editor, tool: .soften, title: "Soften skin", symbol: "drop")
+                RetouchToolButton(editor: editor, tool: .remove, title: "Remove", symbol: "eraser")
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             Text(help)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -568,5 +568,28 @@ struct RetouchPanel: View {
         case .soften: "Paint over skin to smooth it gently. Leave eyes, lips and hair sharp."
         case .remove: "Paint over an unwanted object, a little past its edges. Fotolark fills it in from the surroundings. Works best on simple backgrounds such as sky, grass, sand or walls."
         }
+    }
+}
+
+/// One retouching tool to choose, highlighted when it's the one in use.
+private struct RetouchToolButton: View {
+    @Bindable var editor: PhotoEditor
+    let tool: RetouchStroke.Tool
+    let title: String
+    let symbol: String
+
+    var body: some View {
+        let on = editor.retouchTool == tool
+        Button { editor.retouchTool = tool } label: {
+            Label(title, systemImage: symbol)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .foregroundStyle(on ? Color.white : Color.primary)
+                .background(on ? Color.accentColor : Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 }

@@ -60,6 +60,8 @@ struct ContentView: View {
                     Divider()
                     EditorSidePanel(editor: editor, model: model)
                         .frame(width: 290)
+                        // Nothing in the panel may spill over the photo.
+                        .clipped()
                 }
             }
             .toolbar { EditorToolbar(editor: editor, model: model, showInspector: $showInspector) }
