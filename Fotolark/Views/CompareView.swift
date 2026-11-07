@@ -16,6 +16,7 @@ struct CompareView: View {
     @State private var dragBase: CGPoint?
     @State private var chosen: URL?
     @FocusState private var focused: Bool
+    @Environment(\.colorScheme) private var colorSchemeOutside
 
     var body: some View {
         GeometryReader { geo in
@@ -55,7 +56,8 @@ struct CompareView: View {
                     .onEnded { _ in dragBase = nil }
             )
         }
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(PhotoBackdrop())
+        .environment(\.colorScheme, PhotoBackground.current == .system ? colorSchemeOutside : .dark)
         .focusable()
         .focusEffectDisabled()
         .focused($focused)

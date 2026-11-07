@@ -7,7 +7,8 @@ struct CanvasView: View {
     @Bindable var editor: PhotoEditor
     @Bindable var model: AppModel
     @Environment(\.displayScale) private var displayScale
-    @AppStorage("neutralGrayBackground") private var neutralGray = false
+    @AppStorage(PhotoBackground.key) private var backdrop = PhotoBackground.current
+    @Environment(\.colorScheme) private var systemScheme
     @State private var pinchBase: CGFloat?
     @FocusState private var focused: Bool
 
@@ -87,16 +88,11 @@ struct CanvasView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Photo")
+        // Labels, spinners and scroll bars in their dark style on a dark backdrop.
+        .environment(\.colorScheme, backdrop == .system ? systemScheme : .dark)
     }
 
-    @ViewBuilder
-    private var background: some View {
-        if neutralGray {
-            Color(white: 0.45)
-        } else {
-            Color(nsColor: .underPageBackgroundColor)
-        }
-    }
+    private var background: some View { PhotoBackdrop() }
 
     private func photo(size: CGSize) -> some View {
         ZStack {

@@ -147,7 +147,8 @@ enum LayoutCheck {
 
     private static func snapshot<V: View>(_ view: V, name: String, size: CGSize) {
         for (scheme, suffix) in [(ColorScheme.light, "light"), (.dark, "dark")] {
-            let content = view.environment(\.colorScheme, scheme)
+            // The app's own environment wins inside views that set one (like the canvas).
+        let content = view.environment(\.colorScheme, scheme)
                 .frame(width: size.width, height: size.height, alignment: .topLeading)
                 .background(Color(nsColor: .windowBackgroundColor))
             let host = NSHostingView(rootView: content)

@@ -323,6 +323,7 @@ final class ActionItem: NSMenuItem {
 struct FilmstripView: View {
     @Bindable var model: AppModel
     let current: URL
+    @Environment(\.colorScheme) private var outsideScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -350,7 +351,8 @@ struct FilmstripView: View {
             }
         }
         .frame(height: 76)
-        .background(.bar)
+        .background(PhotoBackdrop())
+        .environment(\.colorScheme, PhotoBackground.current == .system ? outsideScheme : .dark)
     }
 }
 

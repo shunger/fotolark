@@ -5,7 +5,7 @@ struct FotolarkCommands: Commands {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
     @AppStorage("showInspector") private var showInspector = true
-    @AppStorage("neutralGrayBackground") private var neutralGray = false
+    @AppStorage(PhotoBackground.key) private var backdrop = PhotoBackground.current
     @AppStorage("showInfo") private var showInfo = true
     @AppStorage("showFilmstrip") private var showFilmstrip = true
 
@@ -188,7 +188,9 @@ struct FotolarkCommands: Commands {
             Button("Actual Size") { model.zoomToActualSize() }
                 .keyboardShortcut("1")
             Divider()
-            Toggle("Neutral Gray Background", isOn: $neutralGray)
+            Picker("Photo Background", selection: $backdrop) {
+                ForEach(PhotoBackground.allCases) { Text($0.title).tag($0) }
+            }
             Toggle("Show Editing Panel", isOn: $showInspector)
                 .keyboardShortcut("i", modifiers: [.command, .option])
             Toggle("Show Info", isOn: $showInfo)

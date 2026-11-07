@@ -22,7 +22,7 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     @Bindable var model: AppModel
-    @AppStorage("neutralGrayBackground") private var neutralGray = false
+    @AppStorage(PhotoBackground.key) private var backdrop = PhotoBackground.current
 
     var body: some View {
         Form {
@@ -38,7 +38,10 @@ private struct GeneralSettings: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Toggle("Neutral gray background while editing", isOn: $neutralGray)
+            Picker("Behind photos", selection: $backdrop) {
+                ForEach(PhotoBackground.allCases) { Text($0.title).tag($0) }
+            }
+            .help("What surrounds a photo while you edit or compare. Dark helps judge color and brightness.")
 
             Toggle("Look for faces and look-alike photos", isOn: $model.analyzesPhotos)
             Text("Groups faces by person (People) and finds near-duplicates. Done on this Mac in the background; nothing leaves it.")
