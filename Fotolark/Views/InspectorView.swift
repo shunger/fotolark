@@ -47,9 +47,13 @@ struct InspectorView: View {
         }
     }
 
+    private func marks(_ section: PanelSection) -> SectionMarks {
+        SectionMarks(edited: editor.isEdited(section)) { editor.reset(section) }
+    }
+
     @ViewBuilder
     private var mainPanels: some View {
-        InspectorSection("Basic fixes") {
+        InspectorSection("Basic fixes", marks: marks(.basic)) {
             VStack(spacing: 6) {
                 FixButton(title: "Magic fix", systemImage: "wand.and.stars", isOn: editor.has(.magicFix),
                           help: "Fixes exposure, contrast and color in one click") {
@@ -85,7 +89,7 @@ struct InspectorView: View {
             SliderRow(editor: editor, title: "Fill light", key: \.fillLight, range: 0...1, format: "%.0f")
         }
 
-        InspectorSection("Brush and gradient") {
+        InspectorSection("Brush and gradient", marks: marks(.local)) {
             HStack(spacing: 6) {
                 FixButton(title: "Brush", systemImage: "paintbrush.pointed",
                           isOn: editor.localAdjustments.contains { $0.kind == .brush },
@@ -100,7 +104,7 @@ struct InspectorView: View {
             }
         }
 
-        InspectorSection("Crop and rotate") {
+        InspectorSection("Crop and rotate", marks: marks(.crop)) {
             Grid(horizontalSpacing: 6, verticalSpacing: 6) {
                 GridRow {
                     ToolButton(title: "Crop", systemImage: "crop") { editor.beginCrop(); model.zoomToFit() }
@@ -134,11 +138,11 @@ struct InspectorView: View {
                 .foregroundStyle(.secondary)
         }
 
-        InspectorSection("Effects") {
+        InspectorSection("Effects", marks: marks(.effects)) {
             EffectsControls(editor: editor, model: model)
         }
 
-        InspectorSection("Light") {
+        InspectorSection("Light", marks: marks(.light)) {
             HistogramView(histogram: editor.histogram)
             SliderRow(editor: editor, title: "Exposure", key: \.exposure, range: -3...3, format: "%+.2f")
             SliderRow(editor: editor, title: "Brightness", key: \.brightness)
@@ -149,14 +153,14 @@ struct InspectorView: View {
             SliderRow(editor: editor, title: "Blacks", key: \.blacks)
         }
 
-        InspectorSection("Color") {
+        InspectorSection("Color", marks: marks(.color)) {
             SliderRow(editor: editor, title: "Warmth", key: \.temperature)
             SliderRow(editor: editor, title: "Tint", key: \.tint)
             SliderRow(editor: editor, title: "Saturation", key: \.saturation)
             SliderRow(editor: editor, title: "Vibrance", key: \.vibrance)
         }
 
-        InspectorSection("Detail") {
+        InspectorSection("Detail", marks: marks(.detail)) {
             SliderRow(editor: editor, title: "Sharpness", key: \.sharpness, range: 0...1, format: "%.0f")
             SliderRow(editor: editor, title: "Clarity", key: \.clarity)
             SliderRow(editor: editor, title: "Structure", key: \.structure)
@@ -164,14 +168,14 @@ struct InspectorView: View {
             SliderRow(editor: editor, title: "Color noise", key: \.colorNoiseReduction, range: 0...1, format: "%.0f")
         }
 
-        DisclosureSection("Curves") { CurvesEditor(editor: editor) }
-        DisclosureSection("Levels") { LevelsControls(editor: editor) }
-        DisclosureSection("Color ranges") { ColorRangeControls(editor: editor) }
+        DisclosureSection("Curves", marks: marks(.curves)) { CurvesEditor(editor: editor) }
+        DisclosureSection("Levels", marks: marks(.levels)) { LevelsControls(editor: editor) }
+        DisclosureSection("Color ranges", marks: marks(.colorRanges)) { ColorRangeControls(editor: editor) }
 
-        DisclosureSection("Lens correction") { LensControls(editor: editor) }
-        DisclosureSection("Border") { BorderControls(editor: editor) }
+        DisclosureSection("Lens correction", marks: marks(.lens)) { LensControls(editor: editor) }
+        DisclosureSection("Border", marks: marks(.border)) { BorderControls(editor: editor) }
 
-        InspectorSection("Vignette") {
+        InspectorSection("Vignette", marks: marks(.vignette)) {
             SliderRow(editor: editor, title: "Amount", key: \.vignette)
             SliderRow(editor: editor, title: "Size", key: \.vignetteSize, range: 0...1, format: "%.0f", defaultValue: 0.5)
         }
@@ -196,18 +200,26 @@ struct InspectorView: View {
 /// collapsed, and Fotolark remembers how you left it.
 private struct InspectorSection<Content: View>: View {
     let title: String
+    var marks: SectionMarks?
     @ViewBuilder let content: Content
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
+    init(_ title: String, marks: SectionMarks? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.marks = marks
         self.content = content()
     }
 
     var body: some View {
-        CollapsibleSection(title: title, startsOpen: true) {
+        CollapsibleSection(title: title, marks: marks) {
             VStack(alignment: .leading, spacing: 10) { content }
         }
     }
+}
+
+/// Whether a section has edits, and how to clear them.
+struct SectionMarks {
+    let edited: Bool
+    let reset: () -> Void
 }
 
 /// The one look for every section header: a title you can click to fold the section away.
@@ -216,8 +228,11 @@ private struct CollapsibleSection<Content: View>: View {
     @ViewBuilder let content: Content
     private var accordion = InspectorAccordion.shared
 
-    init(title: String, startsOpen: Bool, @ViewBuilder content: () -> Content) {
+    var marks: SectionMarks?
+
+    init(title: String, marks: SectionMarks? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.marks = marks
         self.content = content()
     }
 
@@ -235,14 +250,29 @@ private struct CollapsibleSection<Content: View>: View {
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .frame(width: 12)
                     Text(title).font(.headline)
+                    if marks?.edited == true {
+                        // This section has changes, even while it's folded away.
+                        Circle().fill(Color.accentColor).frame(width: 7, height: 7)
+                            .accessibilityHidden(true)
+                    }
                     Spacer()
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(.isHeader)
-            .accessibilityValue(isExpanded ? "open" : "closed")
+            .accessibilityValue((isExpanded ? "open" : "closed") + (marks?.edited == true ? ", has edits" : ""))
             .help(isExpanded ? "Hide \(title)" : "Show \(title)")
+            .overlay(alignment: .trailing) {
+                if let marks, marks.edited {
+                    Button(action: marks.reset) {
+                        Image(systemName: "arrow.counterclockwise").font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Reset \(title.lowercased()) (you can undo)")
+                    .accessibilityLabel("Reset \(title)")
+                }
+            }
             if isExpanded { content }
         }
         .id(title)
@@ -549,18 +579,20 @@ struct HistogramView: View {
 }
 
 /// A section that can be folded away, for the less-used tools. Remembers its state.
-/// A section that starts closed (for less-used controls such as Curves).
+/// A section for less-used controls such as Curves.
 struct DisclosureSection<Content: View>: View {
     let title: String
+    var marks: SectionMarks?
     @ViewBuilder let content: Content
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
+    init(_ title: String, marks: SectionMarks? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.marks = marks
         self.content = content()
     }
 
     var body: some View {
-        CollapsibleSection(title: title, startsOpen: false) { content }
+        CollapsibleSection(title: title, marks: marks) { content }
     }
 }
 
