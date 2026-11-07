@@ -8,6 +8,9 @@ struct ContentView: View {
     @AppStorage("showFilmstrip") private var showFilmstrip = true
     @State private var isDropTargeted = false
     @State private var columns = NavigationSplitViewVisibility.all
+    /// The sidebar as it was before a photo opened, to put back afterwards.
+    @State private var columnsBeforeEditing: NavigationSplitViewVisibility?
+    @AppStorage("hideSidebarWhileEditing") private var hideSidebarWhileEditing = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -18,6 +21,17 @@ struct ContentView: View {
                 // A short crossfade between the grid and the editor.
                 .transition(.opacity)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.editor?.url)
+        }
+        // More room for the photo: the sidebar steps aside while editing.
+        .onChange(of: model.editor != nil) { _, editing in
+            guard hideSidebarWhileEditing else { return }
+            if editing {
+                columnsBeforeEditing = columns
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { columns = .detailOnly }
+            } else if let before = columnsBeforeEditing {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { columns = before }
+                columnsBeforeEditing = nil
+            }
         }
         .navigationTitle(title)
         .navigationSubtitle(subtitle)
@@ -64,7 +78,8 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
                     CanvasView(editor: editor, model: model)
-                    if showFilmstrip && model.photos.count > 1 {
+                    // Out of the way while zoomed in.
+                    if showFilmstrip && model.photos.count > 1 && model.zoomScale == nil {
                         Divider()
                         FilmstripView(model: model, current: editor.url)
                     }

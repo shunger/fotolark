@@ -23,6 +23,7 @@ struct SettingsView: View {
 private struct GeneralSettings: View {
     @Bindable var model: AppModel
     @AppStorage(PhotoBackground.key) private var backdrop = PhotoBackground.current
+    @AppStorage("hideSidebarWhileEditing") private var hideSidebarWhileEditing = true
 
     var body: some View {
         Form {
@@ -38,6 +39,8 @@ private struct GeneralSettings: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            Toggle("Hide the sidebar while editing a photo", isOn: $hideSidebarWhileEditing)
+                .help("Gives the photo more room; the sidebar comes back when you return to your photos")
             Picker("Behind photos", selection: $backdrop) {
                 ForEach(PhotoBackground.allCases) { Text($0.title).tag($0) }
             }

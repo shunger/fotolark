@@ -341,7 +341,7 @@ struct FilmstripView: View {
                     }
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.vertical, 4)
             }
             .scrollIndicators(.hidden)
             .onAppear { proxy.scrollTo(current, anchor: .center) }
@@ -353,7 +353,7 @@ struct FilmstripView: View {
                 }
             }
         }
-        .frame(height: 76)
+        .frame(height: 62)
         .background(PhotoBackdrop())
         .environment(\.colorScheme, PhotoBackground.current == .system ? outsideScheme : .dark)
     }
@@ -374,7 +374,7 @@ private struct FilmstripCell: View {
                 RoundedRectangle(cornerRadius: 3).fill(.quaternary)
             }
         }
-        .frame(width: 64, height: 64)
+        .frame(width: 50, height: 50)
         .padding(2)
         .overlay {
             RoundedRectangle(cornerRadius: 4)
