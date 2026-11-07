@@ -8,12 +8,16 @@ struct ContentView: View {
     @AppStorage("showFilmstrip") private var showFilmstrip = true
     @State private var isDropTargeted = false
     @State private var columns = NavigationSplitViewVisibility.all
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
             SidebarView(model: model)
         } detail: {
             detail
+                // A short crossfade between the grid and the editor.
+                .transition(.opacity)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.editor?.url)
         }
         .navigationTitle(title)
         .navigationSubtitle(subtitle)

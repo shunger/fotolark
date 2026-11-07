@@ -9,6 +9,7 @@ struct CanvasView: View {
     @Environment(\.displayScale) private var displayScale
     @AppStorage(PhotoBackground.key) private var backdrop = PhotoBackground.current
     @Environment(\.colorScheme) private var systemScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pinchBase: CGFloat?
     @FocusState private var focused: Bool
 
@@ -102,6 +103,8 @@ struct CanvasView: View {
                     .interpolation(.high)
                     .onDrag { dragProvider() }
                     .accessibilityLabel(editor.showOriginal ? "Original photo" : "Edited photo")
+                    // Fades in the first time, instead of popping in.
+                    .transition(.opacity)
             }
             if editor.isSplitShown, let before = editor.beforePreview {
                 SplitCompareOverlay(before: before, position: $editor.splitPosition)
@@ -177,6 +180,7 @@ struct CanvasView: View {
             }
         }
         .frame(width: size.width, height: size.height)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: editor.preview == nil)
     }
 
     /// Moves (or with ⇧, resizes) the crop by 1% so cropping works without a mouse.
