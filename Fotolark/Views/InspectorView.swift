@@ -180,6 +180,8 @@ struct InspectorView: View {
 }
 
 /// A titled group in the inspector.
+/// A section of the editing panel that starts open; like every section, it can be
+/// collapsed, and Fotolark remembers how you left it.
 private struct InspectorSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
@@ -190,11 +192,45 @@ private struct InspectorSection<Content: View>: View {
     }
 
     var body: some View {
+        CollapsibleSection(title: title, startsOpen: true) {
+            VStack(alignment: .leading, spacing: 10) { content }
+        }
+    }
+}
+
+/// The one look for every section header: a title you can click to fold the section away.
+private struct CollapsibleSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+    @AppStorage private var isExpanded: Bool
+
+    init(title: String, startsOpen: Bool, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+        _isExpanded = AppStorage(wrappedValue: startsOpen, "section.\(title)")
+    }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
-            content
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .frame(width: 12)
+                    Text(title).font(.headline)
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityValue(isExpanded ? "open" : "closed")
+            .help(isExpanded ? "Hide \(title)" : "Show \(title)")
+            if isExpanded { content }
         }
     }
 }
@@ -474,23 +510,18 @@ struct HistogramView: View {
 }
 
 /// A section that can be folded away, for the less-used tools. Remembers its state.
+/// A section that starts closed (for less-used controls such as Curves).
 struct DisclosureSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
-    @AppStorage private var isExpanded: Bool
 
     init(_ title: String, @ViewBuilder content: () -> Content) {
         self.title = title
         self.content = content()
-        _isExpanded = AppStorage(wrappedValue: false, "section.\(title)")
     }
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            content.padding(.top, 6)
-        } label: {
-            Text(title).font(.headline).accessibilityAddTraits(.isHeader)
-        }
+        CollapsibleSection(title: title, startsOpen: false) { content }
     }
 }
 
