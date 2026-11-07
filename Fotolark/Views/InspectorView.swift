@@ -238,18 +238,41 @@ private struct CollapsibleSection<Content: View>: View {
 
     private var isExpanded: Bool { accordion.open == title }
 
+    /// A small symbol beside each section's title, so sections are quick to find.
+    static var symbols: [String: String] { sectionSymbols }
+}
+
+private let sectionSymbols: [String: String] = [
+        "Basic fixes": "wand.and.stars", "Brush and gradient": "paintbrush.pointed", "Crop and rotate": "crop.rotate",
+        "Effects": "sparkles", "Light": "sun.max", "Color": "drop", "Detail": "eye",
+        "Curves": "chart.xyaxis.line", "Levels": "chart.bar", "Color ranges": "paintpalette",
+        "Lens correction": "camera.aperture", "Border": "square.dashed", "Vignette": "circle.dashed",
+        "Versions": "square.on.square", "History": "clock.arrow.circlepath",
+]
+
+extension CollapsibleSection {
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) { accordion.toggle(title) }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .frame(width: 12)
-                    Text(title).font(.headline)
+                        .frame(width: 10)
+                    if let symbol = Self.symbols[title] {
+                        Image(systemName: symbol)
+                            .font(.callout)
+                            .foregroundStyle(isExpanded ? Color.accentColor : Color.secondary)
+                            .frame(width: 18)
+                            .accessibilityHidden(true)
+                    }
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(isExpanded ? .primary : .secondary)
                     if marks?.edited == true {
                         // This section has changes, even while it's folded away.
                         Circle().fill(Color.accentColor).frame(width: 7, height: 7)
@@ -356,26 +379,30 @@ struct SliderRow: View {
 
     var body: some View {
         let value = editor.adjustment(key)
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .onTapGesture(count: 2) { editor.setAdjustment(key, to: defaultValue, label: title) }
-                    .help("Double-click to reset")
-                Spacer()
-                Text(display(value))
-                    .monospacedDigit()
-                    .foregroundStyle(value == 0 ? .secondary : .primary)
-            }
-            .font(.callout)
+        let changed = value != defaultValue
+        // One line in fixed columns, so every slider in the panel lines up.
+        HStack(spacing: 8) {
+            Text(title)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(width: 82, alignment: .leading)
+                .onTapGesture(count: 2) { editor.setAdjustment(key, to: defaultValue, label: title) }
+                .help("Double-click to reset")
             Slider(value: Binding(get: { value }, set: { editor.setAdjustment(key, to: $0, label: title) }),
                    in: range) { editing in
                 if !editing { editor.commitPending() }
             }
-            .controlSize(.small)
+            .controlSize(.mini)
             .accessibilityLabel(title)
             .accessibilityValue(display(value))
             .accessibilityAction(named: "Reset") { editor.setAdjustment(key, to: defaultValue, label: title) }
+            Text(display(value))
+                .monospacedDigit()
+                .foregroundStyle(changed ? Color.accentColor : .secondary)
+                .fontWeight(changed ? .semibold : .regular)
+                .frame(width: 38, alignment: .trailing)
         }
+        .font(.callout)
     }
 
     /// Exposure shows stops; the other sliders show −100…+100.
