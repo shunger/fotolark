@@ -409,12 +409,24 @@ private struct ImportCell: View {
                 Group {
                     if let image = source.thumbnail(for: candidate.id) {
                         Image(decorative: image, scale: 1).resizable().scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .transition(.opacity)
                     } else {
                         RoundedRectangle(cornerRadius: 4).fill(.quaternary)
-                            .overlay { if candidate.isVideo { Image(systemName: "video").font(.title).foregroundStyle(.secondary) } }
+                            .overlay {
+                                if candidate.isVideo {
+                                    Image(systemName: "video").font(.title).foregroundStyle(.secondary)
+                                } else {
+                                    Shimmer()
+                                }
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
                     }
                 }
+                .animation(.easeOut(duration: 0.2), value: source.thumbnail(for: candidate.id) != nil)
                 .frame(width: size, height: size * 0.75)
+                // Already imported: faded back, so the new ones stand out.
+                .opacity(alreadyImported && !isSelected ? 0.45 : 1)
                 .overlay(alignment: .bottomLeading) {
                     if isLive || candidate.isVideo {
                         Label(candidate.isVideo ? "Video" : "Live", systemImage: candidate.isVideo ? "video.fill" : "livephoto")
@@ -455,4 +467,24 @@ private struct ImportCell: View {
 /// change as photos scroll into view and nothing needs redrawing for that.
 final class CellFrames {
     var frames: [ImportCandidate.ID: CGRect] = [:]
+}
+
+/// A soft light band sweeping across a placeholder while its picture loads.
+struct Shimmer: View {
+    @State private var phase: CGFloat = -1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { geo in
+            LinearGradient(colors: [.white.opacity(0), .white.opacity(0.18), .white.opacity(0)],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(width: geo.size.width)
+                .offset(x: phase * geo.size.width)
+        }
+        .allowsHitTesting(false)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) { phase = 1 }
+        }
+    }
 }
