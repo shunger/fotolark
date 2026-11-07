@@ -24,6 +24,9 @@ struct EffectsControls: View {
                             }
                             .frame(width: 76, height: 52)
                             .clipShape(RoundedRectangle(cornerRadius: 4))
+                            // Clipping hides the overflow but not its clickable area; without
+                            // this, a tall photo's preview covers the Effects header above it.
+                            .contentShape(RoundedRectangle(cornerRadius: 4))
                             Text(kind.title).font(.caption2).lineLimit(1)
                         }
                     }

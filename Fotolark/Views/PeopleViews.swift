@@ -65,6 +65,7 @@ private struct FaceGroupCard: View {
                 FaceThumb(photo: group.faces[0].photo, face: group.faces[0].face)
                     .frame(width: 120, height: 120)
                     .clipShape(Circle())
+                    .contentShape(Circle())
                     .overlay(Circle().strokeBorder(.quaternary))
             }
             .buttonStyle(.plain)
@@ -100,6 +101,7 @@ struct FaceThumb: View {
             Color.secondary.opacity(0.15)
             if let image { Image(decorative: image, scale: 1).resizable().scaledToFill() }
         }
+        .clipped()
         .task(id: face.id) {
             let face = face, photo = photo
             image = await Task.detached(priority: .utility) { () -> CGImage? in
