@@ -23,20 +23,14 @@ struct BrowserView: View {
                     .frame(width: 260)
             }
         }
-        .toolbar {
-            if let progress = model.pasteProgress {
-                ToolbarItem {
-                    ProgressView(value: Double(progress.done), total: Double(progress.total)) {
-                        Text("Pasting edits \(progress.done) of \(progress.total)")
-                    }
-                    .frame(width: 160)
-                    .font(.caption)
-                }
+        .toolbar(id: "browser") {
+            // Right-click the toolbar › Customize Toolbar… to change what's here.
+            ToolbarItem(id: "open", placement: .navigation) {
+                Button("Open", systemImage: "plus") { model.showOpenPanel() }
+                    .help("Open photos or add a folder (⌘O)")
             }
-            ToolbarItem {
-                FilterMenu(model: model)
-            }
-            ToolbarItem {
+            ToolbarItem(id: "filter") { FilterMenu(model: model) }
+            ToolbarItem(id: "sort") {
                 Picker("Sort", selection: $model.sortOrder) {
                     ForEach(PhotoSortOrder.allCases) { Text($0.title).tag($0) }
                 }
@@ -44,18 +38,13 @@ struct BrowserView: View {
                 .disabled(!(model.source?.isFolderLike ?? true))
                 .help(model.source?.isFolderLike ?? true ? "Sort photos" : "Newest first")
             }
-            ToolbarItem {
+            ToolbarItem(id: "size") {
                 Slider(value: $model.thumbnailSize, in: 80...360)
                     .frame(width: 120)
                     .help("Thumbnail size")
                     .accessibilityLabel("Thumbnail size")
             }
-            ToolbarItem {
-                Button("Export", systemImage: "arrow.down.doc") { model.sheet = .export }
-                    .disabled(model.targetPhotos.isEmpty)
-                    .help("Export edited copies (⌘E)")
-            }
-            ToolbarItem {
+            ToolbarItem(id: "bulk") {
                 Menu {
                     ForEach(BulkTool.allCases) { tool in
                         Button { model.sheet = .bulk(tool) } label: { Label("\(tool.title)…", systemImage: tool.systemImage) }
@@ -66,21 +55,28 @@ struct BrowserView: View {
                 .disabled(model.targetPhotos.isEmpty)
                 .help("Convert, resize, rename, rotate or move the selected photos")
             }
-            ToolbarItem {
+            ToolbarItem(id: "export") {
+                Button("Export", systemImage: "arrow.down.doc") { model.sheet = .export }
+                    .disabled(model.targetPhotos.isEmpty)
+                    .help("Export edited copies (⌘E)")
+            }
+            ToolbarItem(id: "share") { ShareButton(model: model) }
+            ToolbarItem(id: "jobs") { JobsButton(model: model) }
+            ToolbarItem(id: "more") { BrowserMoreMenu(model: model) }
+            ToolbarItem(id: "info") {
+                Button("Info", systemImage: "info.circle") { showInfo.toggle() }
+                    .help("Show or hide photo details (⌘I)")
+            }
+            // Off by default; in the More menu, or add them with Customize Toolbar.
+            ToolbarItem(id: "slideshow", showsByDefault: false) {
                 Button("Slideshow", systemImage: "play.rectangle") { model.startSlideshow() }
                     .disabled(!model.canStartSlideshow)
                     .help("Play the photos full screen (⌥⌘P). Plays just the selected ones if several are selected.")
             }
-            ToolbarItem {
+            ToolbarItem(id: "compare", showsByDefault: false) {
                 Button("Compare", systemImage: "rectangle.split.2x1") { model.compareSelection() }
                     .disabled(!model.canCompare)
                     .help("Compare 2 to 4 selected photos side by side (⌥⌘K)")
-            }
-            ToolbarItem { ShareButton(model: model) }
-            ToolbarItem { JobsButton(model: model) }
-            ToolbarItem {
-                Button("Info", systemImage: "info.circle") { showInfo.toggle() }
-                    .help("Show or hide photo details (⌘I)")
             }
         }
     }
@@ -134,6 +130,37 @@ struct BrowserView: View {
 
     private var selectedSingle: URL? {
         model.selection.count == 1 ? model.selection.first : nil
+    }
+}
+
+/// Less-used grid actions, out of the way.
+struct BrowserMoreMenu: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        Menu {
+            Button("Slideshow", systemImage: "play.rectangle") { model.startSlideshow() }
+                .disabled(!model.canStartSlideshow)
+            Button("Compare Selected", systemImage: "rectangle.split.2x1") { model.compareSelection() }
+                .disabled(!model.canCompare)
+            Divider()
+            Button("Print…", systemImage: "printer") { model.showPages(.print) }
+                .disabled(model.layoutPhotos.isEmpty)
+            Button("Make Collage…", systemImage: "rectangle.3.group") { model.showCollage() }
+                .disabled(model.layoutPhotos.count < 2)
+            Button("Make Contact Sheet…", systemImage: "square.grid.3x3") { model.showPages(.contactSheet) }
+                .disabled(model.layoutPhotos.isEmpty)
+            Button("Export as PDF…", systemImage: "doc.richtext") { model.showPages(.pdf) }
+                .disabled(model.layoutPhotos.isEmpty)
+            Divider()
+            Button("Find Duplicates…", systemImage: "square.on.square") { model.showDuplicates() }
+                .disabled(model.photos.count < 2)
+            Button("Show in Finder", systemImage: "folder") { model.revealInFinder() }
+                .disabled(model.targetPhotos.isEmpty)
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
+        }
+        .help("More: slideshow, compare, print, collage, duplicates")
     }
 }
 

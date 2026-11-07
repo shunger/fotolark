@@ -13,7 +13,11 @@ struct FotolarkApp: App {
                 .frame(minWidth: 760, minHeight: 480)
         }
         .defaultSize(width: 1280, height: 820)
-        .commands { FotolarkCommands(model: model) }
+        .commands {
+            FotolarkCommands(model: model)
+            // View › Show Toolbar and Customize Toolbar…
+            ToolbarCommands()
+        }
 
         Settings {
             SettingsView(model: model)

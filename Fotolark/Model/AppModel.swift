@@ -487,8 +487,6 @@ final class AppModel {
 
     /// Tone and color edits copied with Copy Edits.
     private(set) var copiedEdits: EditRecipe?
-    /// Progress while pasting onto many photos.
-    private(set) var pasteProgress: (done: Int, total: Int)?
 
     /// The edits of the photo being edited, or of the one selected photo.
     var editsToCopy: EditRecipe? {
@@ -501,7 +499,7 @@ final class AppModel {
         copiedEdits = editsToCopy
     }
 
-    var canPasteEdits: Bool { copiedEdits != nil && !targetPhotos.isEmpty && pasteProgress == nil }
+    var canPasteEdits: Bool { copiedEdits != nil && !targetPhotos.isEmpty }
 
     /// Pastes onto the photo being edited (undoable there), or onto every selected photo.
     func pasteEdits() {

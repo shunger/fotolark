@@ -73,7 +73,7 @@ struct ContentView: View {
                         .clipped()
                 }
             }
-            .toolbar { EditorToolbar(editor: editor, model: model, showInspector: $showInspector) }
+            .toolbar(id: "editor") { EditorToolbar(editor: editor, model: model, showInspector: $showInspector) }
             .alert("Save over the original?", isPresented: $model.isConfirmingOverwrite) {
                 Button("Save Over Original", role: .destructive) { model.saveOverOriginal() }
                 Button("Cancel", role: .cancel) {}
@@ -94,12 +94,6 @@ struct ContentView: View {
             }
         } else if model.source != nil {
             BrowserView(model: model)
-                .toolbar {
-                    ToolbarItem(placement: .navigation) {
-                        Button("Open", systemImage: "plus") { model.showOpenPanel() }
-                            .help("Open photos or add a folder (⌘O)")
-                    }
-                }
         } else {
             EmptyStateView(model: model, isDropTargeted: isDropTargeted)
         }
@@ -156,53 +150,98 @@ struct EditorSidePanel: View {
     }
 }
 
-struct EditorToolbar: ToolbarContent {
+/// The editor's toolbar. Right-click it › Customize Toolbar… to add or remove buttons;
+/// less-used ones start hidden and are also in the More menu.
+struct EditorToolbar: CustomizableToolbarContent {
     @Bindable var editor: PhotoEditor
     @Bindable var model: AppModel
     @Binding var showInspector: Bool
 
-    var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigation) {
+    var body: some CustomizableToolbarContent {
+        ToolbarItem(id: "back", placement: .navigation) {
             Button("All Photos", systemImage: "square.grid.2x2") { model.closeEditor() }
                 .help("Back to all photos (Esc)")
+        }
+        ToolbarItem(id: "previous", placement: .navigation) {
             Button("Previous", systemImage: "chevron.left") { model.previous() }
                 .disabled(!model.canGoPrevious)
                 .help("Previous photo (←)")
+        }
+        ToolbarItem(id: "next", placement: .navigation) {
             Button("Next", systemImage: "chevron.right") { model.next() }
                 .disabled(!model.canGoNext)
                 .help("Next photo (→)")
         }
-        ToolbarItemGroup {
-            Button("Open", systemImage: "folder") { model.showOpenPanel() }
-                .help("Open photos or a folder (⌘O)")
-            Button("Rotate Left", systemImage: "rotate.left") { editor.rotate(clockwise: false) }
-                .help("Rotate left (⌘[)")
-            Button("Rotate Right", systemImage: "rotate.right") { editor.rotate(clockwise: true) }
-                .help("Rotate right (⌘])")
-            CompareButton(editor: editor)
+        ToolbarItem(id: "undo") {
+            Button("Undo", systemImage: "arrow.uturn.backward") { editor.undo() }
+                .disabled(!editor.history.canUndo)
+                .help("Undo (⌘Z)")
+        }
+        ToolbarItem(id: "redo") {
+            Button("Redo", systemImage: "arrow.uturn.forward") { editor.redo() }
+                .disabled(!editor.history.canRedo)
+                .help("Redo (⇧⌘Z)")
+        }
+        ToolbarItem(id: "split") {
             Toggle(isOn: $editor.splitCompare) {
                 Label("Before and After", systemImage: "rectangle.split.2x1")
             }
             .help("Show before and after side by side; drag the divider (Y)")
-            Button("Slideshow", systemImage: "play.rectangle") { model.startSlideshow() }
-                .help("Play the photos full screen from this one (⌥⌘P)")
-            Button("Undo", systemImage: "arrow.uturn.backward") { editor.undo() }
-                .disabled(!editor.history.canUndo)
-                .help("Undo (⌘Z)")
-            Button("Redo", systemImage: "arrow.uturn.forward") { editor.redo() }
-                .disabled(!editor.history.canRedo)
-                .help("Redo (⇧⌘Z)")
+        }
+        ToolbarItem(id: "save-to-photos") {
             if model.isEditingPhotosPicture {
                 Button("Save to Photos", systemImage: "photo.badge.checkmark") { model.saveToPhotos() }
                     .disabled(model.isSavingToPhotos)
                     .help("Save this edit back into Apple Photos (Photos keeps the original)")
             }
+        }
+        ToolbarItem(id: "export") {
             Button("Export", systemImage: "arrow.down.doc") { model.sheet = .export }
                 .help("Export an edited copy (⌘E)")
-            ShareButton(model: model)
-            JobsButton(model: model)
-            Button("Inspector", systemImage: "sidebar.right") { showInspector.toggle() }
+        }
+        ToolbarItem(id: "share") { ShareButton(model: model) }
+        ToolbarItem(id: "jobs") { JobsButton(model: model) }
+        ToolbarItem(id: "more") {
+            Menu {
+                Button("Rotate Left", systemImage: "rotate.left") { editor.rotate(clockwise: false) }
+                Button("Rotate Right", systemImage: "rotate.right") { editor.rotate(clockwise: true) }
+                Button("Flip Horizontal", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
+                    editor.flip(horizontally: true)
+                }
+                Button("Flip Vertical", systemImage: "arrow.up.and.down.righttriangle.up.righttriangle.down") {
+                    editor.flip(horizontally: false)
+                }
+                Divider()
+                Button("Slideshow from Here", systemImage: "play.rectangle") { model.startSlideshow() }
+                Button("Print…", systemImage: "printer") { model.showPages(.print) }
+                Button("Show in Finder", systemImage: "folder") { model.revealInFinder() }
+                Button("Open Photos…", systemImage: "plus") { model.showOpenPanel() }
+            } label: {
+                Label("More", systemImage: "ellipsis.circle")
+            }
+            .help("More: rotate, flip, slideshow, print")
+        }
+        ToolbarItem(id: "inspector") {
+            Button("Editing Panel", systemImage: "sidebar.right") { showInspector.toggle() }
                 .help("Show or hide the editing panel (⌥⌘I)")
+        }
+        // Off by default; add them with Customize Toolbar.
+        ToolbarItem(id: "rotate-left", showsByDefault: false) {
+            Button("Rotate Left", systemImage: "rotate.left") { editor.rotate(clockwise: false) }
+                .help("Rotate left (⌘[)")
+        }
+        ToolbarItem(id: "rotate-right", showsByDefault: false) {
+            Button("Rotate Right", systemImage: "rotate.right") { editor.rotate(clockwise: true) }
+                .help("Rotate right (⌘])")
+        }
+        ToolbarItem(id: "hold-original", showsByDefault: false) { CompareButton(editor: editor) }
+        ToolbarItem(id: "slideshow", showsByDefault: false) {
+            Button("Slideshow", systemImage: "play.rectangle") { model.startSlideshow() }
+                .help("Play the photos full screen from this one (⌥⌘P)")
+        }
+        ToolbarItem(id: "open", showsByDefault: false) {
+            Button("Open", systemImage: "folder") { model.showOpenPanel() }
+                .help("Open photos or a folder (⌘O)")
         }
     }
 }
