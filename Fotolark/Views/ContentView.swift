@@ -171,6 +171,10 @@ struct EditorToolbar: ToolbarContent {
             Button("Rotate Right", systemImage: "rotate.right") { editor.rotate(clockwise: true) }
                 .help("Rotate right (⌘])")
             CompareButton(editor: editor)
+            Toggle(isOn: $editor.splitCompare) {
+                Label("Before and After", systemImage: "rectangle.split.2x1")
+            }
+            .help("Show before and after side by side; drag the divider (Y)")
             Button("Slideshow", systemImage: "play.rectangle") { model.startSlideshow() }
                 .help("Play the photos full screen from this one (⌥⌘P)")
             Button("Undo", systemImage: "arrow.uturn.backward") { editor.undo() }

@@ -79,6 +79,16 @@ enum LayoutCheck {
         }
         editor.tool = .none
 
+        // The photo itself, plain and with before and after side by side.
+        editor.setAdjustment(\.saturation, to: -1, label: "Saturation")
+        editor.commitPending()
+        try? await Task.sleep(for: .seconds(1))
+        check("canvas", CanvasView(editor: editor, model: model), width: 800, height: 600)
+        editor.splitCompare = true
+        try? await Task.sleep(for: .seconds(1.5))
+        check("canvas: before and after", CanvasView(editor: editor, model: model), width: 800, height: 600)
+        editor.splitCompare = false
+
         // Sheets and windows at their own size, which must fit a small (1280 × 800) screen.
         let urls = photos
         check("export sheet", ExportSheet(model: model, photos: urls), width: 1200, height: 740, fitsScreen: true)

@@ -194,6 +194,10 @@ struct FotolarkCommands: Commands {
             Toggle("Show Info", isOn: $showInfo)
                 .keyboardShortcut("i")
             Toggle("Show Filmstrip", isOn: $showFilmstrip)
+            Button(editor?.splitCompare == true ? "Hide Before and After" : "Show Before and After  (Y)") {
+                editor?.splitCompare.toggle()
+            }
+            .disabled(editor == nil)
             Button("Start Slideshow") { model.startSlideshow() }
                 .keyboardShortcut("p", modifiers: [.command, .option])
                 .disabled(!model.canStartSlideshow)

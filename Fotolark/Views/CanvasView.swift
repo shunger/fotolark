@@ -74,6 +74,12 @@ struct CanvasView: View {
             model.applyLabel(change, to: [editor.url])
             return .handled
         }
+        // Y shows before and after side by side.
+        .onKeyPress(characters: CharacterSet(charactersIn: "yY")) { press in
+            guard press.modifiers.isDisjoint(with: [.command, .control, .option]) else { return .ignored }
+            editor.splitCompare.toggle()
+            return .handled
+        }
         // Hold the backslash key to see the original.
         .onKeyPress(characters: ["\\"], phases: [.down, .up]) { press in
             editor.showOriginal = press.phase == .down
@@ -100,6 +106,9 @@ struct CanvasView: View {
                     .interpolation(.high)
                     .onDrag { dragProvider() }
                     .accessibilityLabel(editor.showOriginal ? "Original photo" : "Edited photo")
+            }
+            if editor.isSplitShown, let before = editor.beforePreview {
+                SplitCompareOverlay(before: before, position: $editor.splitPosition)
             }
             switch editor.tool {
             case .crop:
@@ -328,5 +337,66 @@ struct RetouchOverlay: View {
             )
         }
         .accessibilityLabel("Paint over the area to retouch")
+    }
+}
+
+/// The original on the left of a divider, the edited photo on the right. Drag the
+/// divider (or anywhere on the line) to move it.
+struct SplitCompareOverlay: View {
+    let before: CGImage
+    @Binding var position: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            let x = geo.size.width * position
+            ZStack(alignment: .topLeading) {
+                Image(decorative: before, scale: 1)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .mask(alignment: .leading) { Rectangle().frame(width: max(x, 0)) }
+                    .allowsHitTesting(false)
+                Rectangle()
+                    .fill(Color.white)
+                    .frame(width: 2, height: geo.size.height)
+                    .shadow(color: .black.opacity(0.5), radius: 2)
+                    .offset(x: x - 1)
+                    .allowsHitTesting(false)
+                Image(systemName: "arrow.left.and.right.circle.fill")
+                    .font(.system(size: 28))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Color.black.opacity(0.7), Color.white)
+                    .shadow(color: .black.opacity(0.4), radius: 2)
+                    .position(x: x, y: geo.size.height / 2)
+                    .allowsHitTesting(false)
+                label("Before").position(x: max(x / 2, 40), y: 20).opacity(x > 90 ? 1 : 0)
+                label("After").position(x: min(x + (geo.size.width - x) / 2, geo.size.width - 40), y: 20)
+                    .opacity(geo.size.width - x > 90 ? 1 : 0)
+                // A strip around the divider to grab it.
+                Color.clear
+                    .frame(width: 36, height: geo.size.height)
+                    .contentShape(Rectangle())
+                    .offset(x: x - 18)
+                    .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("split")).onChanged { v in
+                        position = min(max(v.location.x / geo.size.width, 0), 1)
+                    })
+                    .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+            }
+            .coordinateSpace(name: "split")
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Before and after")
+        .accessibilityValue("Divider at \(Int(position * 100)) percent")
+        .accessibilityAdjustableAction { d in
+            position = min(max(position + (d == .increment ? 0.1 : -0.1), 0), 1)
+        }
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text)
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(.regularMaterial, in: Capsule())
     }
 }

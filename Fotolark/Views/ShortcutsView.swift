@@ -31,6 +31,7 @@ struct ShortcutsView: View {
             ("← →", "Previous or next photo"),
             ("Esc", "Back to all photos (or leave a tool)"),
             ("Hold \\", "Show the original"),
+            ("Y", "Before and after side by side (drag the divider)"),
             ("⇧⌘M", "Magic fix"),
             ("⌥⌘B", "Neutral color picker"),
             ("⌥⌘C", "Crop"),

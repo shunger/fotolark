@@ -42,6 +42,14 @@ final class PhotoEditor {
         }
     }
     var showOriginal = false { didSet { if showOriginal != oldValue { scheduleRender() } } }
+    /// Before and after side by side, split by a divider you drag.
+    var splitCompare = false { didSet { if splitCompare != oldValue { scheduleRender() } } }
+    /// Where the divider sits, 0 (all after) to 1 (all before).
+    var splitPosition = 0.5
+    /// The photo with only its crop and turns, lined up with the edited preview.
+    private(set) var beforePreview: CGImage?
+
+    var isSplitShown: Bool { splitCompare && tool == .none && !showOriginal }
     /// Set by the canvas: how many pixels across the photo is drawn on screen.
     var displayPixelsNeeded = 0 { didSet { if needsFullResolution != previewIsFullResolution { scheduleRender() } } }
     var isBusy = false
@@ -94,8 +102,9 @@ final class PhotoEditor {
     var shownRecipe: EditRecipe {
         if showOriginal { return EditRecipe() }
         var r = recipe.withoutResize
-        // Tools work on the photo itself, so a border is hidden while one is open.
-        if tool != .none { r = r.removing(.border) }
+        // Tools work on the photo itself, so a border is hidden while one is open (and in
+        // the split view, where both sides must line up).
+        if tool != .none || splitCompare { r = r.removing(.border) }
         // Captions and shapes sit on the cropped photo, so they're hidden while the crop changes.
         if tool == .crop { r = r.removing(.crop).removing(.text).removing(.markup) }
         return r
@@ -675,11 +684,17 @@ final class PhotoEditor {
             let usingFull = wantFull && full != nil
             let shown = shownRecipe
             let engine = engine
-            let (image, histogram) = await Task.detached(priority: .userInitiated) {
+            // The split view's "before": only what moves the picture, so it lines up.
+            let before: EditRecipe? = isSplitShown
+                ? EditRecipe(operations: shown.operations.filter { [.orient, .straighten, .crop].contains($0.kind) })
+                : nil
+            let (image, histogram, beforeImage) = await Task.detached(priority: .userInitiated) {
                 (engine.render(shown, source: source.image, includeResize: false),
-                 engine.histogram(of: RecipeRenderer.apply(shown, to: proxy.image, includeResize: false)))
+                 engine.histogram(of: RecipeRenderer.apply(shown, to: proxy.image, includeResize: false)),
+                 before.flatMap { engine.render($0, source: source.image, includeResize: false) })
             }.value
             preview = image
+            beforePreview = beforeImage
             self.histogram = histogram
             previewIsFullResolution = usingFull
         }
