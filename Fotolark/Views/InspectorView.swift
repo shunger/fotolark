@@ -249,17 +249,24 @@ private struct CollapsibleSection<Content: View>: View {
     }
 }
 
-/// One section of the editing panel open at a time: Basic fixes when Fotolark starts,
-/// then whichever title was clicked last (clicking the open one closes it).
+/// One section of the editing panel open at a time: whichever title was clicked last
+/// (clicking the open one closes it), remembered between launches. Basic fixes the
+/// first time.
 @MainActor @Observable
 final class InspectorAccordion {
     static let shared = InspectorAccordion()
     static let firstSection = "Basic fixes"
+    private static let key = "inspector.openSection"
 
-    private(set) var open: String? = firstSection
+    /// nil = every section closed.
+    private(set) var open: String? = {
+        guard let saved = UserDefaults.standard.string(forKey: key) else { return firstSection }
+        return saved.isEmpty ? nil : saved
+    }()
 
     func toggle(_ title: String) {
         open = open == title ? nil : title
+        UserDefaults.standard.set(open ?? "", forKey: Self.key)
     }
 }
 
