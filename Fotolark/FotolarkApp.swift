@@ -38,6 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = services
         NSUpdateDynamicServices()
+        #if DEBUG
+        MainActor.assumeIsolated { LayoutCheck.runIfAsked() }
+        #endif
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

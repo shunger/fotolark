@@ -79,9 +79,10 @@ struct ImportView: View {
                 Divider()
                 content
             }
-            .frame(minWidth: 280, maxWidth: .infinity)
+            .frame(minWidth: 240, maxWidth: .infinity)
             Divider()
-            optionsPanel.frame(width: 300)
+            // Narrow enough that the photos keep room in the smallest window.
+            optionsPanel.frame(width: 270)
         }
         .onAppear {
             if destination == nil { destination = model.library.resolvedURLs[model.library.roots.first?.id ?? UUID()] }

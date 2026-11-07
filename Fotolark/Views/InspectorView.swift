@@ -265,7 +265,11 @@ final class InspectorAccordion {
     }()
 
     func toggle(_ title: String) {
-        open = open == title ? nil : title
+        setOpen(open == title ? nil : title)
+    }
+
+    func setOpen(_ title: String?) {
+        open = title
         UserDefaults.standard.set(open ?? "", forKey: Self.key)
     }
 }
